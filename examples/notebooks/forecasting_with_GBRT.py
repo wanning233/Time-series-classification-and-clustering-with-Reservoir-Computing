@@ -10,16 +10,23 @@
 
 import os
 import matplotlib
-# 设置 matplotlib 后端和内联显示
+
+# 环境探测
+KAGGLE_ENV = os.path.exists('/kaggle/working')
 try:
-    # 尝试设置为内联模式（在 Jupyter/Kaggle Notebook 中）
-    get_ipython().run_line_magic('matplotlib', 'inline')
-except:
-    # 如果不是在 Notebook 环境中，使用默认后端
+    from IPython.display import Image, display, HTML  # Notebook 环境
+    IN_NOTEBOOK = True
+except ImportError:
+    IN_NOTEBOOK = False
+
+# 后端设置：在 Kaggle/脚本模式使用无界面后端，避免 FigureManager 报错
+if KAGGLE_ENV or not IN_NOTEBOOK:
+    matplotlib.use('Agg')
+elif IN_NOTEBOOK:
     try:
-        matplotlib.use('TkAgg')  # 尝试使用交互式后端
-    except:
-        pass  # 使用默认后端
+        get_ipython().run_line_magic('matplotlib', 'inline')
+    except Exception:
+        pass
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,13 +37,6 @@ from sklearn.decomposition import PCA
 from reservoir_computing.reservoir import Reservoir
 from reservoir_computing.utils import make_forecasting_dataset
 from reservoir_computing.datasets import PredLoader
-
-# 尝试导入 IPython.display（在 Kaggle Notebook 中可用）
-try:
-    from IPython.display import Image, display, HTML
-    IN_NOTEBOOK = True
-except ImportError:
-    IN_NOTEBOOK = False
 
 np.random.seed(0) # For reproducibility
 
