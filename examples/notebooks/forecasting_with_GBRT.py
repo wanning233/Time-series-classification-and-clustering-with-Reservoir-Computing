@@ -47,6 +47,29 @@ else:
 os.makedirs(picture_dir, exist_ok=True)
 print(f"图片将保存到: {picture_dir}")
 
+# 定义辅助函数：列出保存的图片文件
+def list_saved_images():
+    """列出 picture 文件夹中所有保存的图片文件"""
+    print("\n" + "="*60)
+    print("picture 文件夹中的图片文件:")
+    print("="*60)
+    if os.path.exists(picture_dir):
+        files = sorted([f for f in os.listdir(picture_dir) if f.endswith(('.png', '.jpg', '.jpeg'))])
+        if files:
+            for i, filename in enumerate(files, 1):
+                filepath = os.path.join(picture_dir, filename)
+                file_size = os.path.getsize(filepath) / 1024  # KB
+                print(f"{i}. {filename}")
+                print(f"   完整路径: {filepath}")
+                print(f"   文件大小: {file_size:.2f} KB")
+                if IN_NOTEBOOK:
+                    print(f"   [可在 Kaggle 输出文件列表中查看]")
+        else:
+            print("   (暂无图片文件)")
+    else:
+        print(f"   (文件夹不存在: {picture_dir})")
+    print("="*60 + "\n")
+
 # Load the data
 
 # We will use the dataloader `PredLoader` to get a forecasting datatset.
@@ -157,6 +180,13 @@ plt.title("True vs predicted electricity load")
 ridge_img_path = os.path.join(picture_dir, 'forecasting_ridge_result.png')
 plt.savefig(ridge_img_path, dpi=150, bbox_inches='tight')
 print(f"图片已保存为: {ridge_img_path}")
+
+# 显示图片（如果在 Notebook 环境中）
+if IN_NOTEBOOK:
+    display(Image(ridge_img_path))
+else:
+    plt.show()  # 在本地交互式环境中显示
+
 plt.close()
 
 # Fit the readout (GBRT)
@@ -199,4 +229,14 @@ plt.title("Predicted electricity load using Gradient Boosting Regression Trees")
 gbrt_img_path = os.path.join(picture_dir, 'forecasting_gbrt_result.png')
 plt.savefig(gbrt_img_path, dpi=150, bbox_inches='tight')
 print(f"图片已保存为: {gbrt_img_path}")
+
+# 显示图片（如果在 Notebook 环境中）
+if IN_NOTEBOOK:
+    display(Image(gbrt_img_path))
+else:
+    plt.show()  # 在本地交互式环境中显示
+
 plt.close()
+
+# 列出所有保存的图片文件
+list_saved_images()
