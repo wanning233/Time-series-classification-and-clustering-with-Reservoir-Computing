@@ -9,6 +9,18 @@
 # Let's start by importing the necessary libraries.
 
 import os
+import matplotlib
+# 设置 matplotlib 后端和内联显示
+try:
+    # 尝试设置为内联模式（在 Jupyter/Kaggle Notebook 中）
+    get_ipython().run_line_magic('matplotlib', 'inline')
+except:
+    # 如果不是在 Notebook 环境中，使用默认后端
+    try:
+        matplotlib.use('TkAgg')  # 尝试使用交互式后端
+    except:
+        pass  # 使用默认后端
+
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.linear_model import Ridge
@@ -21,7 +33,7 @@ from reservoir_computing.datasets import PredLoader
 
 # 尝试导入 IPython.display（在 Kaggle Notebook 中可用）
 try:
-    from IPython.display import Image, display
+    from IPython.display import Image, display, HTML
     IN_NOTEBOOK = True
 except ImportError:
     IN_NOTEBOOK = False
@@ -69,6 +81,131 @@ def list_saved_images():
     else:
         print(f"   (文件夹不存在: {picture_dir})")
     print("="*60 + "\n")
+
+# 定义函数：创建 HTML 报告，方便在浏览器中查看所有图片
+def create_html_report():
+    """创建一个 HTML 报告文件，包含所有保存的图片"""
+    if not os.path.exists(picture_dir):
+        print("picture 文件夹不存在，无法创建报告")
+        return
+    
+    files = sorted([f for f in os.listdir(picture_dir) if f.endswith(('.png', '.jpg', '.jpeg'))])
+    if not files:
+        print("没有找到图片文件")
+        return
+    
+    html_content = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Forecasting Results - 预测结果报告</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .image-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #fafafa;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        .image-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .info {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .timestamp {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Forecasting Results - 预测结果报告</h1>
+"""
+    
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    for i, filename in enumerate(files, 1):
+        filepath = os.path.join(picture_dir, filename)
+        file_size = os.path.getsize(filepath) / 1024  # KB
+        
+        # HTML 文件和图片在同一目录，所以直接使用文件名
+        img_src = filename
+        
+        title = filename.replace('_', ' ').replace('.png', '').title()
+        
+        html_content += f"""
+        <div class="image-section">
+            <div class="image-title">{i}. {title}</div>
+            <img src="{img_src}" alt="{filename}">
+            <div class="info">
+                文件名: {filename}<br>
+                文件大小: {file_size:.2f} KB<br>
+                完整路径: {filepath}
+            </div>
+        </div>
+"""
+    
+    html_content += f"""
+        <div class="timestamp">
+            报告生成时间: {timestamp}
+        </div>
+    </div>
+</body>
+</html>
+"""
+    
+    html_path = os.path.join(picture_dir, 'results_report.html')
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    
+    print(f"\n✅ HTML 报告已创建: {html_path}")
+    print(f"   可以在浏览器中打开查看所有图片")
+    
+    # 如果在 Notebook 环境中，尝试自动打开
+    if IN_NOTEBOOK:
+        try:
+            display(HTML(f'<a href="{html_path}" target="_blank">点击打开 HTML 报告</a>'))
+        except:
+            pass
+    
+    return html_path
 
 # Load the data
 
@@ -179,13 +316,18 @@ plt.legend()
 plt.title("True vs predicted electricity load")
 ridge_img_path = os.path.join(picture_dir, 'forecasting_ridge_result.png')
 plt.savefig(ridge_img_path, dpi=150, bbox_inches='tight')
-print(f"图片已保存为: {ridge_img_path}")
+print(f"✅ 图片已保存: {ridge_img_path}")
 
-# 显示图片（如果在 Notebook 环境中）
+# 显示图片
 if IN_NOTEBOOK:
+    # 在 Notebook 中直接显示
     display(Image(ridge_img_path))
 else:
-    plt.show()  # 在本地交互式环境中显示
+    # 在本地环境中显示（如果支持）
+    try:
+        plt.show(block=False)  # 非阻塞显示
+    except:
+        pass
 
 plt.close()
 
@@ -228,15 +370,41 @@ plt.legend()
 plt.title("Predicted electricity load using Gradient Boosting Regression Trees")
 gbrt_img_path = os.path.join(picture_dir, 'forecasting_gbrt_result.png')
 plt.savefig(gbrt_img_path, dpi=150, bbox_inches='tight')
-print(f"图片已保存为: {gbrt_img_path}")
+print(f"✅ 图片已保存: {gbrt_img_path}")
 
-# 显示图片（如果在 Notebook 环境中）
+# 显示图片
 if IN_NOTEBOOK:
+    # 在 Notebook 中直接显示
     display(Image(gbrt_img_path))
 else:
-    plt.show()  # 在本地交互式环境中显示
+    # 在本地环境中显示（如果支持）
+    try:
+        plt.show(block=False)  # 非阻塞显示
+    except:
+        pass
 
 plt.close()
 
 # 列出所有保存的图片文件
+print("\n" + "="*70)
+print("📊 所有图片已生成完成！")
+print("="*70)
 list_saved_images()
+
+# 创建 HTML 报告，方便在浏览器中查看所有图片
+print("\n正在生成 HTML 报告...")
+html_report_path = create_html_report()
+
+print("\n" + "="*70)
+print("💡 查看图片的多种方式：")
+print("="*70)
+print("1. 📁 直接打开文件夹查看:")
+print(f"   {picture_dir}")
+print("\n2. 🌐 在浏览器中打开 HTML 报告（推荐）:")
+print(f"   {html_report_path}")
+print("\n3. 📋 在 Kaggle 中:")
+print("   - 图片会自动显示在输出单元格中")
+print("   - 或在右侧 'Output' 标签页中查看 /kaggle/working/picture/ 文件夹")
+print("\n4. 🔍 使用 Python 查看:")
+print("   - 调用 list_saved_images() 函数查看文件列表")
+print("="*70)
