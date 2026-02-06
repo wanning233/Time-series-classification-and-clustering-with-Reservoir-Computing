@@ -4,21 +4,21 @@ from sklearn.preprocessing import StandardScaler
 
 def compute_test_scores(pred_class, Yte):
     """
-    Wrapper to compute classification accuracy and F1 score
+    计算分类准确率和F1分数的包装函数
 
-    Parameters:
+    参数:
     -----------
     pred_class : np.ndarray
-        Predicted class labels
+        预测的类别标签
     Yte : np.ndarray
-        True class labels
+        真实的类别标签
 
-    Returns:
+    返回:
     --------
     accuracy : float
-        Classification accuracy
+        分类准确率
     f1 : float
-        F1 score
+        F1分数
     """
     
     true_class = np.argmax(Yte, axis=1)
@@ -38,43 +38,43 @@ def make_forecasting_dataset(X,
         val_percent = 0.0, 
         scaler = None):
     r"""
-    This function does the following:
+    此函数执行以下操作：
 
-    1. Splits the dataset in training, validation and test sets
-    2. Shift the target data by 'horizon' to create the forecasting problem
-    3. Normalizes the data
+    1. 将数据集分割为训练集、验证集和测试集
+    2. 将目标数据移动'horizon'步以创建预测问题
+    3. 标准化数据
 
-    Parameters:
+    参数:
     -----------
     X : np.ndarray
-        Input data
+        输入数据
     horizon : int
-        Forecasting horizon
+        预测范围
     test_percent : float
-        Percentage of the data to be used for testing
+        用于测试的数据百分比
     val_percent : float
-        Percentage of the data to be used for validation
-        If 0, no validation set is created
-    scaler : a scaler object from sklearn.preprocessing 
-        Scaler object to normalize the data
-        If None, a StandardScaler is created
+        用于验证的数据百分比
+        如果为0，则不创建验证集
+    scaler : sklearn.preprocessing中的缩放器对象
+        用于标准化数据的缩放器对象
+        如果为None，则创建StandardScaler
 
-    Returns:
+    返回:
     --------
     Xtr : np.ndarray
-        Training input data
+        训练输入数据
     Ytr : np.ndarray
-        Training target data
+        训练目标数据
     Xte : np.ndarray 
-        Test input data
+        测试输入数据
     Yte : np.ndarray
-        Test target data
-    scaler : a scaler object from sklearn.preprocessing
-        Scaler object used to normalize the data
-    Xval : np.ndarray (optional)
-        Validation input data
-    Yval : np.ndarray (optional)
-        Validation target data
+        测试目标数据
+    scaler : sklearn.preprocessing中的缩放器对象
+        用于标准化数据的缩放器对象
+    Xval : np.ndarray (可选)
+        验证输入数据
+    Yval : np.ndarray (可选)
+        验证目标数据
     """
     n_data, _ = X.shape
 
@@ -82,13 +82,13 @@ def make_forecasting_dataset(X,
     n_val = np.ceil(val_percent*n_data).astype(int)
     n_tr = n_data - n_te - n_val
 
-    # Split dataset in training, validation and test
+    # 将数据集分割为训练集、验证集和测试集
     tr = X[:n_tr, :]
     te = X[-n_te:, :]
     if n_val > 0:
         val = X[n_tr:-n_te, :]
 
-    # Shift target data to create forecasting problem
+    # 移动目标数据以创建预测问题
     Xtr = tr[:-horizon,:]
     Ytr = tr[horizon:,:]
     Xte = te[:-horizon,:]
@@ -97,20 +97,20 @@ def make_forecasting_dataset(X,
         Xval = val[:-horizon,:]
         Yval = val[horizon:,:]
 
-    # Define scaler if not provided
+    # 如果未提供缩放器，则定义缩放器
     if scaler is None:
         scaler = StandardScaler()
 
-    # Fit scaler on training set
+    # 在训练集上拟合缩放器
     Xtr = scaler.fit_transform(Xtr)
 
-    # Transform the rest
+    # 转换其余数据
     Ytr = scaler.transform(Ytr)
     Xte = scaler.transform(Xte)
     if n_val > 0:
         Xval = scaler.transform(Xval)
     
-    # Add constant input
+    # 添加常数输入
     Xtr = np.concatenate((Xtr,np.ones((Xtr.shape[0],1))),axis=1)
     Xte = np.concatenate((Xte,np.ones((Xte.shape[0],1))),axis=1)
     if n_val > 0:

@@ -7,7 +7,7 @@ from scipy.integrate import solve_ivp
 
 class ClfLoader:
     r"""
-    Class to download and load time series classification datasets.
+    用于下载和加载时间序列分类数据集的类。
     """
     def __init__(self) -> None:
         self.datasets = {
@@ -31,14 +31,14 @@ class ClfLoader:
 
     def available_datasets(self, details=False):
         r"""
-        Print the available datasets.
+        打印可用的数据集。
 
-        Parameters:
+        参数:
         -----------
         details : bool
-            If True, print a description of the datasets.
+            如果为True，打印数据集的描述。
 
-        Returns:
+        返回:
         --------
         None
         """
@@ -51,23 +51,23 @@ class ClfLoader:
 
     def get_data(self, alias):
         r"""
-        Download and load the dataset.
+        下载并加载数据集。
 
-        Parameters:
+        参数:
         -----------
         alias : str
-            The alias of the dataset to be downloaded.
+            要下载的数据集的别名。
 
-        Returns:
+        返回:
         --------
         Xtr : np.ndarray
-            Training data
+            训练数据
         Ytr : np.ndarray
-            Training labels
+            训练标签
         Xte : np.ndarray
-            Test data
+            测试数据
         Yte : np.ndarray
-            Test labels
+            测试标签
         """
 
         if alias not in self.datasets:
@@ -78,10 +78,10 @@ class ClfLoader:
         if response.status_code == 200:
 
             data = np.load(BytesIO(response.content))
-            Xtr = data['Xtr']  # shape is [N,T,V]
+            Xtr = data['Xtr']  # 形状为 [N,T,V]
             if len(Xtr.shape) < 3:
                 Xtr = np.atleast_3d(Xtr)
-            Ytr = data['Ytr']  # shape is [N,1]
+            Ytr = data['Ytr']  # 形状为 [N,1]
             Xte = data['Xte']
             if len(Xte.shape) < 3:
                 Xte = np.atleast_3d(Xte)
@@ -100,7 +100,7 @@ class ClfLoader:
 
 class PredLoader():
     """
-    Class to download and load time series forecasting datasets.
+    用于下载和加载时间序列预测数据集的类。
     """
     def __init__(self) -> None:
         self.datasets = {
@@ -110,14 +110,14 @@ class PredLoader():
 
     def available_datasets(self, details=False):
         """
-        Print the available datasets.
+        打印可用的数据集。
 
-        Parameters:
+        参数:
         -----------
         details : bool
-            If True, print a description of the datasets.
+            如果为True，打印数据集的描述。
 
-        Returns:
+        返回:
         --------
         None
         """
@@ -130,17 +130,17 @@ class PredLoader():
 
     def get_data(self, alias) -> np.ndarray:
         """
-        Download and load the dataset.
+        下载并加载数据集。
 
-        Parameters:
+        参数:
         -----------
         alias : str
-            The alias of the dataset to be downloaded.
+            要下载的数据集的别名。
 
-        Returns:
+        返回:
         --------
         X : np.ndarray
-            Time series data
+            时间序列数据
         """
         if alias not in self.datasets:
             raise ValueError(f"Dataset {alias} not found.")
@@ -161,40 +161,39 @@ class PredLoader():
 
 
 def mackey_glass(sample_len=1000, tau=17, delta_t=1, seed=None, n_samples = 1):
-    r"""Generate the Mackey Glass time-series. 
+    r"""生成Mackey Glass时间序列。 
 
-        Parameters:
+        参数:
         -----------
-        sample_len : int (default ``1000``)
-            Length of the time-series in timesteps.
-        tau : int (default ``17``)
-            Delay of the MG system. Commonly used values are tau=17 (mild 
-            chaos) and tau=30 (moderate chaos).
-        delta_t : int (default ``1``)
-            Time step of the simulation.
-        seed : int or None (default ``None``)
-            Seed of the random generator. Can be used to generate the same
-            timeseries each time.
-        n_samples : int (default ``1``)
-            Number of samples to generate.
+        sample_len : int (默认 ``1000``)
+            时间序列的长度（时间步数）。
+        tau : int (默认 ``17``)
+            MG系统的延迟。常用值为tau=17（轻度混沌）
+            和tau=30（中度混沌）。
+        delta_t : int (默认 ``1``)
+            仿真的时间步长。
+        seed : int 或 None (默认 ``None``)
+            随机数生成器的种子。可用于每次生成相同的时间序列。
+        n_samples : int (默认 ``1``)
+            要生成的样本数量。
 
-        Returns:
+        返回:
         --------
         np.ndarray | list
-            Generated Mackey-Glass time-series.
-            If n_samples is 1, a single array is returned. Otherwise, a list.
+            生成的Mackey-Glass时间序列。
+            如果n_samples为1，返回单个数组。否则返回列表。
     """
     np.random.seed(seed)
     history_len = tau * delta_t 
     
-    # Initial condition
+    # 初始条件
     timeseries = 1.2
     
     samples = []
     for _ in range(n_samples):
         history = collections.deque(1.2 * np.ones(history_len) + 0.2 * \
                                     (np.random.rand(history_len) - 0.5))
-        # Preallocate the array for the time-series
+        # 为时间序列预分配数组
         inp = np.zeros((sample_len,1))
         
         for timestep in range(sample_len):
@@ -205,7 +204,7 @@ def mackey_glass(sample_len=1000, tau=17, delta_t=1, seed=None, n_samples = 1):
                              0.1 * history[-1]) / delta_t
             inp[timestep] = timeseries
         
-        # Squash timeseries through tanh
+        # 通过tanh压缩时间序列
         inp = np.tanh(inp - 1)
         samples.append(inp)
 
@@ -216,25 +215,24 @@ def mackey_glass(sample_len=1000, tau=17, delta_t=1, seed=None, n_samples = 1):
 
 
 def mso(T=1000, N=10, seed=None, freq=0.5):
-    r"""Generates the Multiple Sinewave Oscillator (MSO) time-series 
-    by combining inusoids with incommensurable periods.
-    The sinusoids to be combined are selected randomly.
+    r"""通过组合具有不可通约周期的正弦波生成多重正弦波振荡器（MSO）时间序列。
+    要组合的正弦波是随机选择的。
 
-    Parameters:
+    参数:
     -----------
-    T : int (default ``1000``)
-        Number of time steps.
-    N : int (default ``10``)
-        Maximum number of sinusoids to combine.
-    seed : int or None (default ``None``)
-        Seed for the random generator.
-    freq : float (default ``0.5``)
-        Frequency of the sinusoids.
+    T : int (默认 ``1000``)
+        时间步数。
+    N : int (默认 ``10``)
+        要组合的正弦波的最大数量。
+    seed : int 或 None (默认 ``None``)
+        随机数生成器的种子。
+    freq : float (默认 ``0.5``)
+        正弦波的频率。
 
-    Returns:
+    返回:
     --------
     np.ndarray
-        MSO time-series.
+        MSO时间序列。
     """
     np.random.seed(seed)
 
@@ -253,7 +251,7 @@ def mso(T=1000, N=10, seed=None, freq=0.5):
 
 
 def _lorenz_system(t, y, sigma, rho, beta):
-    """Lorenz system of differential equations.
+    """Lorenz微分方程组。
     """
     x, y, z = y
     dxdt = sigma * (y - x)
@@ -263,27 +261,27 @@ def _lorenz_system(t, y, sigma, rho, beta):
 
 
 def lorenz(sigma=10, rho=28, beta=8/3, y0=[0, -0.01, 9.0], t_span=[0, 100], dt=1e-3):
-    r"""Generate the Lorenz attractor time-series.
+    r"""生成Lorenz吸引子时间序列。
     
-    Parameters:
+    参数:
     -----------
-    sigma : float (default ``10``)
-        1st parameter of the Lorenz system.
-    rho : float (default ``28``)
-        2nd parameter of the Lorenz system.
-    beta : float (default ``8/3``)
-        3rd parameter of the Lorenz system.
-    y0 : list (default ``[0, -0.01, 9.0]``)
-        Initial conditions of the Lorenz system.
-    t_span : list (default ``[0, 100]``)
-        Time span of the simulation.
-    dt : float (default ``1e-3``)
-        Time step of the simulation.
+    sigma : float (默认 ``10``)
+        Lorenz系统的第1个参数。
+    rho : float (默认 ``28``)
+        Lorenz系统的第2个参数。
+    beta : float (默认 ``8/3``)
+        Lorenz系统的第3个参数。
+    y0 : list (默认 ``[0, -0.01, 9.0]``)
+        Lorenz系统的初始条件。
+    t_span : list (默认 ``[0, 100]``)
+        仿真的时间跨度。
+    dt : float (默认 ``1e-3``)
+        仿真的时间步长。
 
-    Returns:
+    返回:
     --------
     np.ndarray
-        Lorenz time-series.
+        Lorenz时间序列。
     """
     t = np.linspace(t_span[0], t_span[1], int(1/dt))
     solution = solve_ivp(_lorenz_system, t_span, y0, args=(sigma, rho, beta), t_eval=t)
@@ -291,7 +289,7 @@ def lorenz(sigma=10, rho=28, beta=8/3, y0=[0, -0.01, 9.0], t_span=[0, 100], dt=1
 
 
 def _rossler_system(t, y, a, b, c):
-    """Rossler system of differential equations.
+    """Rossler微分方程组。
     """
     x, y, z = y
     dxdt = -y - z
@@ -301,27 +299,27 @@ def _rossler_system(t, y, a, b, c):
 
 
 def rossler(a=0.2, b=0.2, c=5.7, y0=[0.5, 0.5, 0.5], t_span=[0, 200], dt=1e-3):
-    r"""Generate the Rossler attractor time-series.
+    r"""生成Rossler吸引子时间序列。
     
-    Parameters:
+    参数:
     -----------
-    a : float (default ``0.2``)
-        1st parameter of the Rossler system.
-    b : float (default ``0.2``)
-        2nd parameter of the Rossler system.
-    c : float (default ``5.7``)
-        3rd parameter of the Rossler system.
-    y0 : list (default ``[0, 0.1, 0]``)
-        Initial conditions of the Rossler system.
-    t_span : list (default ``[0, 100]``)
-        Time span of the simulation.
-    dt : float (default ``1e-3``)
-        Time step of the simulation.
+    a : float (默认 ``0.2``)
+        Rossler系统的第1个参数。
+    b : float (默认 ``0.2``)
+        Rossler系统的第2个参数。
+    c : float (默认 ``5.7``)
+        Rossler系统的第3个参数。
+    y0 : list (默认 ``[0, 0.1, 0]``)
+        Rossler系统的初始条件。
+    t_span : list (默认 ``[0, 100]``)
+        仿真的时间跨度。
+    dt : float (默认 ``1e-3``)
+        仿真的时间步长。
 
-    Returns:
+    返回:
     --------
     np.ndarray
-        Rossler time-series.
+        Rossler时间序列。
     """
     t = np.linspace(t_span[0], t_span[1], int(1/dt))
     solution = solve_ivp(_rossler_system, t_span, y0, args=(a, b, c), t_eval=t)
@@ -330,7 +328,7 @@ def rossler(a=0.2, b=0.2, c=5.7, y0=[0.5, 0.5, 0.5], t_span=[0, 200], dt=1e-3):
 
 class SynthLoader:
     """
-    Class to generate synthetic time series.
+    用于生成合成时间序列的类。
     """
 
     def __init__(self) -> None:
@@ -343,9 +341,9 @@ class SynthLoader:
 
     def available_datasets(self, details=False):
         """
-        Print the available synthetic datasets.
+        打印可用的合成数据集。
 
-        Returns:
+        返回:
         --------
         None
         """
@@ -358,19 +356,19 @@ class SynthLoader:
 
     def get_data(self, alias, **kwargs):
         """
-        Generate the synthetic time series.
+        生成合成时间序列。
 
-        Parameters:
+        参数:
         -----------
         alias : str
-            The alias of the synthetic dataset to be generated.
+            要生成的合成数据集的别名。
         kwargs : dict
-            Additional parameters for the synthetic dataset.
+            合成数据集的附加参数。
 
-        Returns:
+        返回:
         --------
         np.ndarray
-            Synthetic time series.
+            合成时间序列。
         """
         if alias not in self.datasets:
             raise ValueError(f"Dataset {alias} not found.")
@@ -383,17 +381,17 @@ class SynthLoader:
 
 
 if __name__ == '__main__':
-    # Example usage (classification)
+    # 示例用法（分类）
     downloader = ClfLoader()
-    downloader.available_datasets(details=False)  # Print available datasets
-    Xtr, Ytr, Xte, Yte = downloader.get_data('Libras')  # Download dataset and return data
+    downloader.available_datasets(details=False)  # 打印可用数据集
+    Xtr, Ytr, Xte, Yte = downloader.get_data('Libras')  # 下载数据集并返回数据
 
-    # Example usage (forecasting)
+    # 示例用法（预测）
     downloader = PredLoader()
-    downloader.available_datasets(details=False)  # Print available datasets
-    X = downloader.get_data('CDR')  # Download dataset and return data
+    downloader.available_datasets(details=False)  # 打印可用数据集
+    X = downloader.get_data('CDR')  # 下载数据集并返回数据
 
-    # Example usage (synthetic)
+    # 示例用法（合成）
     synth = SynthLoader()
-    synth.available_datasets()  # Print available datasets
-    Xs = synth.get_data('Lorenz')  # Generate synthetic time series
+    synth.available_datasets()  # 打印可用数据集
+    Xs = synth.get_data('Lorenz')  # 生成合成时间序列

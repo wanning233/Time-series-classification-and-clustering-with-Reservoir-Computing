@@ -4,18 +4,17 @@ import numpy.linalg as linalg
 
 class tensorPCA:
     r"""
-    Compute PCA on a dataset of multivariate time series represented as a 3-dimensional tensor
-    and reduce the size along the third dimension from ``[N, T, V]`` to ``[N, T, D]``, where ``D <= V`` .
+    对表示为3维张量的多变量时间序列数据集计算PCA，
+    并将第三维的大小从 ``[N, T, V]`` 降为 ``[N, T, D]``，其中 ``D <= V``。
 
-    The input dataset must be a 3-dimensional tensor, where the first dimension ``N`` represents 
-    the number of observations, the second dimension ``T`` represents the number of time steps 
-    in the time series, and the third dimension ``V`` represents the number of variables in the time series.
+    输入数据集必须是3维张量，其中第一维 ``N`` 表示观测数量，
+    第二维 ``T`` 表示时间序列中的时间步数，
+    第三维 ``V`` 表示时间序列中的变量数量。
 
-    Parameters
+    参数
     ----------
     n_components : int
-        The number of principal components to keep after the dimensionality reduction. This
-        determines the size of the third dimension ``D`` in the output tensor.
+        降维后保留的主成分数量。这决定了输出张量中第三维 ``D`` 的大小。
     """
 
     def __init__(self, n_components):
@@ -24,15 +23,15 @@ class tensorPCA:
         
     def fit(self, X):
         r"""
-        Fit the tensorPCA model to the input dataset ``X``.
+        将tensorPCA模型拟合到输入数据集 ``X``。
         
-        Parameters:
+        参数:
         ------------
         X : np.ndarray
-            Time series, 3D array of shape ``[N,T,V]``, where ``N`` is the number of time series,
-            ``T`` is the length of each time series, and ``V`` is the number of variables in each.
+            时间序列，形状为 ``[N,T,V]`` 的3维数组，其中 ``N`` 是时间序列的数量，
+            ``T`` 是每个时间序列的长度，``V`` 是每个时间序列中的变量数量。
 
-        Returns:
+        返回:
         ------------
         None
         """
@@ -40,12 +39,12 @@ class tensorPCA:
             raise RuntimeError('Input must be a 3d tensor')
         
         Xt = np.swapaxes(X,1,2)  # [N,T,V] --> [N,V,T]
-        Xm = np.expand_dims(np.mean(X, axis=0), axis=0) # mean sample
+        Xm = np.expand_dims(np.mean(X, axis=0), axis=0) # 平均样本
         Xmt = np.swapaxes(Xm,1,2)
         
-        C = np.tensordot(X-Xm,Xt-Xmt,axes=([1,0],[2,0])) / (X.shape[0]-1) # covariance of 0-mode slices
+        C = np.tensordot(X-Xm,Xt-Xmt,axes=([1,0],[2,0])) / (X.shape[0]-1) # 0模式切片的协方差
         
-        # Sort eigenvalues of covariance matrix
+        # 对协方差矩阵的特征值进行排序
         eigenValues, eigenVectors = linalg.eig(C)
         idx = eigenValues.argsort()[::-1]   
         eigenVectors = eigenVectors[:,idx]
@@ -54,37 +53,37 @@ class tensorPCA:
         
     def transform(self, X):
         r"""
-        Transform the input dataset X using the tensorPCA model.
+        使用tensorPCA模型转换输入数据集X。
 
-        Parameters:
+        参数:
         ------------
         X : np.ndarray
-            Time series, 3D array of shape ``[N,T,V]``, where ``N`` is the number of time series,
-            ``T`` is the length of each time series, and ``V`` is the number of variables in each.
+            时间序列，形状为 ``[N,T,V]`` 的3维数组，其中 ``N`` 是时间序列的数量，
+            ``T`` 是每个时间序列的长度，``V`` 是每个时间序列中的变量数量。
 
-        Returns:
+        返回:
         ------------
         Xpca : np.ndarray
-            Transformed time series, 3D array of shape ``[N,T,D]``, where ``N`` is the number of time series,
-            ``T`` is the length of each time series, and ``D`` is the number of principal components.
+            转换后的时间序列，形状为 ``[N,T,D]`` 的3维数组，其中 ``N`` 是时间序列的数量，
+            ``T`` 是每个时间序列的长度，``D`` 是主成分的数量。
         """
         return np.einsum('klj,ji->kli',X,self.first_eigs)
     
     def fit_transform(self, X):
         r"""
-        Fit the tensorPCA model to the input dataset ``X`` and transform it.
+        将tensorPCA模型拟合到输入数据集 ``X`` 并转换它。
 
-        Parameters:
+        参数:
         ------------
         X : np.ndarray
-            Time series, 3D array of shape ``[N,T,V]``, where ``N`` is the number of time series,
-            ``T`` is the length of each time series, and ``V`` is the number of variables in each.
+            时间序列，形状为 ``[N,T,V]`` 的3维数组，其中 ``N`` 是时间序列的数量，
+            ``T`` 是每个时间序列的长度，``V`` 是每个时间序列中的变量数量。
 
-        Returns:
+        返回:
         ------------
         Xpca : np.ndarray
-            Transformed time series, 3D array of shape ``[N,T,D]``, where ``N`` is the number of time series,
-            ``T`` is the length of each time series, and ``D`` is the number of principal components.
+            转换后的时间序列，形状为 ``[N,T,D]`` 的3维数组，其中 ``N`` 是时间序列的数量，
+            ``T`` 是每个时间序列的长度，``D`` 是主成分的数量。
         """
         self.fit(X)
         return self.transform(X)
