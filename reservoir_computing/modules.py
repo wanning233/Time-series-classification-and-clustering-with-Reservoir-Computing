@@ -662,7 +662,17 @@ class StackedRC_model(object):
         # 处理储备池配置
         if reservoir_configs is None:
             # 默认渐进式配置：层数越多，单元数递减
-            default_units = [200, 150] if n_layers == 2 else [300, 200, 150][:n_layers]
+            if n_layers == 2:
+                default_units = [200, 150]
+            elif n_layers == 3:
+                default_units = [300, 200, 150]
+            elif n_layers == 4:
+                default_units = [400, 300, 200, 150]
+            else:
+                # 对于更多层，使用线性递减
+                base_units = 400
+                default_units = [base_units - i * 50 for i in range(n_layers)]
+            
             reservoir_configs = [
                 {
                     'n_internal_units': units,
