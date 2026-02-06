@@ -44,11 +44,11 @@ mts_representations_original = rcm_original.input_repr
 print(f"   表示维度: {mts_representations_original.shape}")
 
 # ============ 层叠RC模型 ============
-print("\n3. 训练层叠RC模型（2、3、4层）...")
+print("\n3. 训练层叠RC模型（2、3、4、5、6层）...")
 stacked_models = {}
 stacked_representations = {}
 
-for n_layers in [2, 3, 4]:
+for n_layers in [2, 3, 4, 5, 6]:
     print(f"\n   训练 {n_layers} 层层叠模型...")
     rcm_stacked = StackedRC_model(
         n_layers=n_layers,
@@ -99,7 +99,7 @@ nmi_original, ari_original, n_clust_original, clust_original = evaluate_clusteri
 
 # 评估各层层叠模型
 stacked_results = {}
-for n_layers in [2, 3, 4]:
+for n_layers in [2, 3, 4, 5, 6]:
     nmi, ari, n_clust, clust = evaluate_clustering(
         stacked_representations[n_layers], 
         true_labels, 
@@ -118,13 +118,13 @@ print("结果对比总结")
 print("=" * 80)
 
 # 表头
-header = f"{'指标':<15} {'原始RC':<12} {'2层':<12} {'3层':<12} {'4层':<12}"
+header = f"{'指标':<15} {'原始RC':<12} {'2层':<12} {'3层':<12} {'4层':<12} {'5层':<12} {'6层':<12}"
 print(f"\n{header}")
-print("-" * 80)
+print("-" * 100)
 
 # NMI对比
 nmi_row = f"{'NMI':<15} {nmi_original:<12.4f}"
-for n_layers in [2, 3, 4]:
+for n_layers in [2, 3, 4, 5, 6]:
     nmi_val = stacked_results[n_layers]['nmi']
     improvement = nmi_val - nmi_original
     nmi_row += f" {nmi_val:<11.4f}"
@@ -132,24 +132,24 @@ print(nmi_row)
 
 # ARI对比
 ari_row = f"{'ARI':<15} {ari_original:<12.4f}"
-for n_layers in [2, 3, 4]:
+for n_layers in [2, 3, 4, 5, 6]:
     ari_val = stacked_results[n_layers]['ari']
     ari_row += f" {ari_val:<11.4f}"
 print(ari_row)
 
 # 聚类数对比
 clust_row = f"{'聚类数':<15} {n_clust_original:<12}"
-for n_layers in [2, 3, 4]:
+for n_layers in [2, 3, 4, 5, 6]:
     n_clust_val = stacked_results[n_layers]['n_clust']
     clust_row += f" {n_clust_val:<12}"
 print(clust_row)
 
 # 改进情况分析
-print("\n" + "=" * 80)
+print("\n" + "=" * 100)
 print("改进情况分析（相对于原始RC模型）")
-print("=" * 80)
+print("=" * 100)
 
-for n_layers in [2, 3, 4]:
+for n_layers in [2, 3, 4, 5, 6]:
     nmi_val = stacked_results[n_layers]['nmi']
     ari_val = stacked_results[n_layers]['ari']
     
@@ -170,13 +170,32 @@ for n_layers in [2, 3, 4]:
         print(f"  ✗ ARI: 降低了 {ari_decrease:+.2f}% ({ari_val:.4f} vs {ari_original:.4f})")
 
 # 找出最佳层数
-best_nmi_layer = max([2, 3, 4], key=lambda x: stacked_results[x]['nmi'])
-best_ari_layer = max([2, 3, 4], key=lambda x: stacked_results[x]['ari'])
+best_nmi_layer = max([2, 3, 4, 5, 6], key=lambda x: stacked_results[x]['nmi'])
+best_ari_layer = max([2, 3, 4, 5, 6], key=lambda x: stacked_results[x]['ari'])
 
-print("\n" + "=" * 80)
+print("\n" + "=" * 100)
 print("最佳配置")
-print("=" * 80)
+print("=" * 100)
 print(f"最佳NMI: {best_nmi_layer}层 (NMI = {stacked_results[best_nmi_layer]['nmi']:.4f})")
 print(f"最佳ARI: {best_ari_layer}层 (ARI = {stacked_results[best_ari_layer]['ari']:.4f})")
+
+# 层数趋势分析
+print("\n" + "=" * 100)
+print("层数趋势分析")
+print("=" * 100)
+print(f"{'层数':<10} {'NMI':<12} {'NMI变化':<15} {'ARI':<12} {'ARI变化':<15}")
+print("-" * 100)
+prev_nmi = nmi_original
+prev_ari = ari_original
+for n_layers in [2, 3, 4, 5, 6]:
+    nmi_val = stacked_results[n_layers]['nmi']
+    ari_val = stacked_results[n_layers]['ari']
+    nmi_change = nmi_val - prev_nmi
+    ari_change = ari_val - prev_ari
+    change_symbol_nmi = "↑" if nmi_change > 0 else "↓" if nmi_change < 0 else "→"
+    change_symbol_ari = "↑" if ari_change > 0 else "↓" if ari_change < 0 else "→"
+    print(f"{n_layers:<10} {nmi_val:<12.4f} {change_symbol_nmi} {nmi_change:+.4f} ({nmi_change*100:+.2f}%){'':<5} {ari_val:<12.4f} {change_symbol_ari} {ari_change:+.4f} ({ari_change*100:+.2f}%)")
+    prev_nmi = nmi_val
+    prev_ari = ari_val
 
 print("\n实验完成！")

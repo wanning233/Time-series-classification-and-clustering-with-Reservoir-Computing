@@ -668,10 +668,14 @@ class StackedRC_model(object):
                 default_units = [300, 200, 150]
             elif n_layers == 4:
                 default_units = [400, 300, 200, 150]
+            elif n_layers == 5:
+                default_units = [400, 350, 300, 200, 150]
+            elif n_layers == 6:
+                default_units = [400, 350, 300, 250, 200, 150]
             else:
                 # 对于更多层，使用线性递减
                 base_units = 400
-                default_units = [base_units - i * 50 for i in range(n_layers)]
+                default_units = [max(base_units - i * 50, 100) for i in range(n_layers)]  # 最少100个单元
             
             reservoir_configs = [
                 {
