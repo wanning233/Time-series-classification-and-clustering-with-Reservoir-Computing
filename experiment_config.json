@@ -1,6 +1,6 @@
 {
-  "experiment_name": "层叠 Reservoir 聚类调优实验",
-  "version": "1.0",
+  "experiment_name": "层叠 Reservoir 聚类调优实验 - 第 2 轮",
+  "version": "2.0",
   "last_updated": "2026-02-17",
   
   "datasets": [
@@ -53,7 +53,9 @@
     "narrow": [300, 250, 200, 150, 100],
     "uniform": [300, 300, 300, 300, 300],
     "gradual_decay": [400, 380, 360, 340, 320],
-    "steep_decay": [400, 350, 300, 200, 150]
+    "steep_decay": [400, 350, 300, 200, 150],
+    "aggressive_wide": [600, 500, 400, 300, 200],
+    "balanced": [350, 350, 350, 350, 350]
   },
   
   "metrics": {
@@ -61,41 +63,225 @@
     "classification": ["Accuracy", "F1", "Precision", "Recall"]
   },
   
+  "baseline_results": {
+    "config": "5 层 [400,350,300,200,150]",
+    "Japanese_Vowels": {
+      "NMI": 0.8295,
+      "ARI": 0.7856
+    },
+    "note": "5 层表现最佳，6 层性能下降可能过拟合"
+  },
+  
   "experiment_queue": [
     {
       "id": "exp_001",
-      "name": "基准测试 - 5 层默认配置",
+      "name": "基准复现 - 5 层默认配置",
+      "priority": 1,
       "config": {
         "n_layers": 5,
         "units_per_layer": [400, 350, 300, 200, 150],
         "spectral_radius": 0.99,
-        "connectivity": 0.3
+        "connectivity": 0.3,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
       },
-      "status": "pending"
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "复现基准结果 NMI=0.8295"
     },
     {
       "id": "exp_002",
-      "name": "宽配置测试",
+      "name": "宽配置测试 - 更强表达能力",
+      "priority": 2,
       "config": {
         "n_layers": 5,
         "units_per_layer": [500, 400, 350, 300, 200],
         "spectral_radius": 0.99,
-        "connectivity": 0.3
+        "connectivity": 0.3,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
       },
-      "status": "pending"
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "增加单元数，测试表达能力上限"
     },
     {
       "id": "exp_003",
-      "name": "谱半径调优 - 0.999",
+      "name": "缓慢递减配置 - 保持更多信息",
+      "priority": 3,
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [400, 380, 360, 340, 320],
+        "spectral_radius": 0.99,
+        "connectivity": 0.3,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
+      },
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "更平缓的递减，测试信息保留效果"
+    },
+    {
+      "id": "exp_004",
+      "name": "谱半径调优 - 0.999 强记忆",
+      "priority": 4,
       "config": {
         "n_layers": 5,
         "units_per_layer": [400, 350, 300, 200, 150],
         "spectral_radius": 0.999,
-        "connectivity": 0.3
+        "connectivity": 0.3,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
       },
-      "status": "pending"
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "测试更强记忆能力对长序列的影响"
+    },
+    {
+      "id": "exp_005",
+      "name": "谱半径调优 - 0.95 稳定",
+      "priority": 5,
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [400, 350, 300, 200, 150],
+        "spectral_radius": 0.95,
+        "connectivity": 0.3,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
+      },
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "测试更稳定的动态是否减少过拟合"
+    },
+    {
+      "id": "exp_006",
+      "name": "连接度调优 - 0.4 密集连接",
+      "priority": 6,
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [400, 350, 300, 200, 150],
+        "spectral_radius": 0.99,
+        "connectivity": 0.4,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
+      },
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "增加连接密度，测试表达能力"
+    },
+    {
+      "id": "exp_007",
+      "name": "连接度调优 - 0.2 稀疏连接",
+      "priority": 7,
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [400, 350, 300, 200, 150],
+        "spectral_radius": 0.99,
+        "connectivity": 0.2,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
+      },
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "稀疏连接，测试稳定性和泛化"
+    },
+    {
+      "id": "exp_008",
+      "name": "均匀配置测试",
+      "priority": 8,
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [350, 350, 350, 350, 350],
+        "spectral_radius": 0.99,
+        "connectivity": 0.3,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
+      },
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "测试均匀层配置的效果"
+    },
+    {
+      "id": "exp_009",
+      "name": "噪声正则化 - noise=0.05",
+      "priority": 9,
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [400, 350, 300, 200, 150],
+        "spectral_radius": 0.99,
+        "connectivity": 0.3,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.05,
+        "representation": "mean"
+      },
+      "datasets": ["Japanese_Vowels", "Libras"],
+      "status": "pending",
+      "note": "添加噪声提高泛化能力"
+    },
+    {
+      "id": "exp_010",
+      "name": "最佳配置组合测试",
+      "priority": 10,
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [500, 400, 350, 300, 200],
+        "spectral_radius": 0.999,
+        "connectivity": 0.4,
+        "input_scaling": 0.2,
+        "leak": null,
+        "noise_level": 0.0,
+        "representation": "mean"
+      },
+      "datasets": ["Japanese_Vowels", "Libras", "UWaveGestureLibrary"],
+      "status": "pending",
+      "note": "组合最优参数的激进配置"
     }
   ],
   
-  "notes": "5 层配置表现最佳 (NMI=0.8295, ARI=0.7856)，6 层可能过拟合"
+  "execution_plan": {
+    "phase_1": {
+      "name": "单元配置调优",
+      "experiments": ["exp_001", "exp_002", "exp_003", "exp_008"],
+      "goal": "确定最佳单元数配置模式"
+    },
+    "phase_2": {
+      "name": "谱半径调优",
+      "experiments": ["exp_004", "exp_005"],
+      "goal": "确定最佳记忆能力"
+    },
+    "phase_3": {
+      "name": "连接度调优",
+      "experiments": ["exp_006", "exp_007"],
+      "goal": "确定最佳连接密度"
+    },
+    "phase_4": {
+      "name": "正则化测试",
+      "experiments": ["exp_009"],
+      "goal": "测试噪声对泛化的影响"
+    },
+    "phase_5": {
+      "name": "最佳组合验证",
+      "experiments": ["exp_010"],
+      "goal": "验证最优参数组合"
+    }
+  },
+  
+  "notes": "第 2 轮调优：基于 5 层最佳结果 (NMI=0.8295, ARI=0.7856)，系统性地探索单元配置、谱半径、连接度的影响"
 }
