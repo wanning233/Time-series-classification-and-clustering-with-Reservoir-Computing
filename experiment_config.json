@@ -1,0 +1,101 @@
+{
+  "experiment_name": "层叠 Reservoir 聚类调优实验",
+  "version": "1.0",
+  "last_updated": "2026-02-17",
+  
+  "datasets": [
+    "Japanese_Vowels",
+    "Libras",
+    "UWaveGestureLibrary",
+    "CharacterTrajectories",
+    "ECG200",
+    "FordA",
+    "Wafer",
+    "Yoga"
+  ],
+  
+  "default_config": {
+    "n_layers": 5,
+    "units_per_layer": [400, 350, 300, 200, 150],
+    "spectral_radius": 0.99,
+    "connectivity": 0.3,
+    "input_scaling": 0.2,
+    "leak": null,
+    "noise_level": 0.0,
+    "representation": "mean"
+  },
+  
+  "tuning_ranges": {
+    "n_layers": {
+      "min": 2,
+      "max": 6,
+      "recommended": [3, 4, 5]
+    },
+    "spectral_radius": {
+      "min": 0.90,
+      "max": 0.999,
+      "recommended": [0.95, 0.99, 0.999]
+    },
+    "connectivity": {
+      "min": 0.2,
+      "max": 0.5,
+      "recommended": [0.2, 0.3, 0.4]
+    },
+    "input_scaling": {
+      "min": 0.1,
+      "max": 0.5,
+      "recommended": [0.1, 0.2, 0.3]
+    }
+  },
+  
+  "unit_configs": {
+    "wide": [500, 400, 350, 300, 200],
+    "narrow": [300, 250, 200, 150, 100],
+    "uniform": [300, 300, 300, 300, 300],
+    "gradual_decay": [400, 380, 360, 340, 320],
+    "steep_decay": [400, 350, 300, 200, 150]
+  },
+  
+  "metrics": {
+    "clustering": ["NMI", "ARI", "Homogeneity", "Completeness"],
+    "classification": ["Accuracy", "F1", "Precision", "Recall"]
+  },
+  
+  "experiment_queue": [
+    {
+      "id": "exp_001",
+      "name": "基准测试 - 5 层默认配置",
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [400, 350, 300, 200, 150],
+        "spectral_radius": 0.99,
+        "connectivity": 0.3
+      },
+      "status": "pending"
+    },
+    {
+      "id": "exp_002",
+      "name": "宽配置测试",
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [500, 400, 350, 300, 200],
+        "spectral_radius": 0.99,
+        "connectivity": 0.3
+      },
+      "status": "pending"
+    },
+    {
+      "id": "exp_003",
+      "name": "谱半径调优 - 0.999",
+      "config": {
+        "n_layers": 5,
+        "units_per_layer": [400, 350, 300, 200, 150],
+        "spectral_radius": 0.999,
+        "connectivity": 0.3
+      },
+      "status": "pending"
+    }
+  ],
+  
+  "notes": "5 层配置表现最佳 (NMI=0.8295, ARI=0.7856)，6 层可能过拟合"
+}

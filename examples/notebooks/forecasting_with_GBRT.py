@@ -1,12 +1,12 @@
-# Probabilistic forecasting with GBRT
+# 使用 GBRT 进行概率预测
 
-# The class `reservoir_computing.RC_forecaster` allows to quickly perform forecasting by fitting a linear model that maps the reservoir states into the predictions. The linear is implemented as the ridge regressor from sklearn `sklearn.linear_model.Ridge`.
+# `reservoir_computing.RC_forecaster` 类允许通过拟合一个将储层状态映射到预测的线性模型来快速执行预测。该线性模型实现为 sklearn 的岭回归器 `sklearn.linear_model.Ridge`。
 
-# It is however possible to use other regression models from sklearn, including those that computes confidence intervals obtaining, in this way, a probabilistic forecasting. 
+# 然而，可以使用 sklearn 中的其他回归模型，包括那些计算置信区间的模型，从而获得概率预测。
 
-# In this example we will use `sklearn.ensemble.HistGradientBoostingRegressor`, a Gradient Boost Regression Tree (GBRT) that allows to compute different quantiles.
+# 在本示例中，我们将使用 `sklearn.ensemble.HistGradientBoostingRegressor`，这是一个梯度提升回归树（GBRT），允许计算不同的分位数。
 
-# Let's start by importing the necessary libraries.
+# 让我们从导入必要的库开始。
 
 import os
 import matplotlib
@@ -38,7 +38,7 @@ from reservoir_computing.reservoir import Reservoir
 from reservoir_computing.utils import make_forecasting_dataset
 from reservoir_computing.datasets import PredLoader
 
-np.random.seed(0) # For reproducibility
+np.random.seed(0) # 为了可重复性
 
 # 检测是否在 Kaggle 环境
 KAGGLE_ENV = os.path.exists('/kaggle/working')
@@ -207,43 +207,43 @@ def create_html_report():
     
     return html_path
 
-# Load the data
+# 加载数据
 
-# We will use the dataloader `PredLoader` to get a forecasting datatset.
-# To see what datatsets are available, we can call the function `available_datasets`. By setting `details=True` we can get additional information.
+# 我们将使用数据加载器 `PredLoader` 来获取预测数据集。
+# 要查看有哪些可用的数据集，我们可以调用函数 `available_datasets`。通过设置 `details=True` 可以获取额外信息。
 
 downloader = PredLoader()
-downloader.available_datasets(details=True)  # Describe available datasets
+downloader.available_datasets(details=True)  # 描述可用的数据集
 
-# - For this example, we will use `ElecRome` that is the electricity consumption coming from a backbone of the energy supply network in the city of Rome.
-# - The original data is a time series sampled every 10 minutes. 
-# - If we are not interested in such an high resolution, we can resample the data to hourly resolution by creating a new time series whose entries are the means of 6 consecutive time steps in the original series. 
-# - We also take only the first `3000` time steps to be faster in fitting the model.
+# - 对于本示例，我们将使用 `ElecRome`，这是来自罗马市能源供应网络骨干的电力消耗数据。
+# - 原始数据是每 10 分钟采样一次的时间序列。
+# - 如果我们不需要如此高的分辨率，可以通过创建一个新时间序列来将数据重采样为每小时分辨率，新序列的条目是原始序列中连续 6 个时间步的平均值。
+# - 我们还只取前 `3000` 个时间步，以便更快地拟合模型。
 
-# Download data
+# 下载数据
 ts_full = downloader.get_data("ElecRome")
 
-# Resample the time series to hourly frequency
+# 将时间序列重采样为每小时频率
 ts_hourly = np.mean(ts_full.reshape(-1, 6), axis=1)[:, None]
 print("Resampled: ", ts_hourly.shape)
 
-# Use only the first 3000 time steps
+# 仅使用前 3000 个时间步
 ts_small = ts_hourly[0:3000,:]
 print("Resampled small: ", ts_small.shape)
 
-# Prepare the datasets
+# 准备数据集
 
-# To train our regression model we need input and target data `Xtr` and `Ytr`. 
-# We also need test data `Xte` and `Yte` to test our model and validation data `Xval` and `Yval` if we need to do hyperparameters tuning.
-# We will use the function `make_forecasting_dataset` that given a time series `X` does the following computations:
+# 为了训练我们的回归模型，我们需要输入和目标数据 `Xtr` 和 `Ytr`。
+# 我们还需要测试数据 `Xte` 和 `Yte` 来测试我们的模型，如果需要调整超参数，还需要验证数据 `Xval` 和 `Yval`。
+# 我们将使用函数 `make_forecasting_dataset`，给定时间序列 `X`，它执行以下计算：
 
-# 1. Splits the dataset in consecutive chunks: `train`, `val` and `test`. The size of the chunks is given by the values `val_percent` and `test_percent`. If we do not need validation data, set `val_percent=0` (default) and the validation data will not be created.
-# 2. Create input data `X` and target data `Y` by shifting the data `horizon` time steps, where `horizon` is how far we want to predict. For example:
+# 1. 将数据集分割为连续的块：`train`、`val` 和 `test`。块的大小由 `val_percent` 和 `test_percent` 的值给出。如果不需要验证数据，设置 `val_percent=0`（默认值），验证数据将不会被创建。
+# 2. 通过将数据移动 `horizon` 个时间步来创建输入数据 `X` 和目标数据 `Y`，其中 `horizon` 是我们想要预测的距离。例如：
 #     - `Xtr = train[:-horizon,:]`
 #     - `Ytr = train[horizon:,:]`
-# 3. Normalizes the data using a scaler object from `sklearn.preprocessing`. If no scalers are passed, a `StandardScaler` is created. The scaler is fit on `Xtr` and then used to transform `Ytr`, `Xval`, and `Xte`. Note that `Yval` and `Yte` are **not** transformed.
+# 3. 使用 `sklearn.preprocessing` 中的缩放器对象对数据进行归一化。如果没有传递缩放器，则创建一个 `StandardScaler`。缩放器在 `Xtr` 上拟合，然后用于转换 `Ytr`、`Xval` 和 `Xte`。注意 `Yval` 和 `Yte` **不会**被转换。
 
-# The code below exemplifies the use of the function.
+# 下面的代码示例了该函数的使用。
 
 X = np.arange(36)[:, None]
 
@@ -257,18 +257,18 @@ print("Yval: ", Yval.T)
 print("Xte: ", scaler.inverse_transform(Xte.T)[0])
 print("Yte: ", Yte.T)
 
-# - For this example, we want to make forecast 24h ahead. 
-# - Also, we are not opitimizing the hyperparameters of the model so we do not need a valiation set (we leave the default `val_percent=0` and the validation data will not be returned).
+# - 对于本示例，我们想要预测未来 24 小时。
+# - 另外，我们不优化模型的超参数，所以不需要验证集（我们保留默认的 `val_percent=0`，验证数据将不会被返回）。
 
-# Generate training and test datasets
+# 生成训练和测试数据集
 Xtr, Ytr, Xte, Yte, scaler = make_forecasting_dataset(ts_small,
-                                                      horizon=24, # forecast horizon of 24h ahead
+                                                      horizon=24, # 预测未来 24 小时的预测范围
                                                       test_percent = 0.1)
 
-# Define the Reservoir
+# 定义储层
 
-# - Next, we create a Reservoir by specifying (rather arbitrarily) the hyperparameters.
-# - Then, we compute the sequence of the Reservoir states `states_tr` and `states_te` associated with the training and test data, respecitvely.
+# - 接下来，我们通过指定（相当随意地）超参数来创建储层。
+# - 然后，我们计算与训练和测试数据相关的储层状态序列 `states_tr` 和 `states_te`。
 
 res = Reservoir(n_internal_units=1000, 
                 spectral_radius=0.95, 
@@ -282,31 +282,31 @@ n_drop=10
 states_tr = res.get_states(Xtr[None,:,:], n_drop=n_drop, bidir=False)
 states_te = res.get_states(Xte[None,:,:], n_drop=n_drop, bidir=False)
 
-# Dimensionalty reduction (optional)
+# 降维（可选）
 
-# - As optional step, we can reduce the size of the Reservoir states, which in this example is quite large. 
-# - In particular, since `n_internal_units=1000`, we end up with a sequence of length `T` of vectors with size `1000`.
-# - Dimensionality reduction can speed up the training, especially if we use a sophisticated model as the readout, and can also provide some regularization that improves the prediction performances.
-# - Below, we Reduce the dimension of the reservoir states from `1000` to `75`.
+# - 作为可选步骤，我们可以减少储层状态的大小，在这个例子中储层状态相当大。
+# - 特别是，由于 `n_internal_units=1000`，我们最终得到一个长度为 `T`、大小为 `1000` 的向量序列。
+# - 降维可以加快训练速度，特别是如果我们使用复杂的模型作为读出层，还可以提供一些正则化来改善预测性能。
+# - 下面，我们将储层状态的维度从 `1000` 减少到 `75`。
 
 pca = PCA(n_components=75)
 states_tr = pca.fit_transform(states_tr[0])
 states_te = pca.transform(states_te[0])
 
-# Fit the readout (linear)
+# 拟合读出层（线性）
 
-# - We are now ready to train the readout to predict the desired output given the sequence of (reduced) Reservoir states.
-# - We start by using a linear readout implemented by a Ridge regressor.
-# - After the readout is trained, we use it to compute the predictions $\hat{Y}_\text{te}$ of the test data.
+# - 现在我们已经准备好训练读出层，以根据（降维后的）储层状态序列预测期望的输出。
+# - 我们首先使用由岭回归器实现的线性读出层。
+# - 在读出层训练完成后，我们使用它来计算测试数据的预测 $\hat{Y}_\text{te}$。
 
-# Fit the ridge regression model
+# 拟合岭回归模型
 ridge = Ridge(alpha=1.0) 
 ridge.fit(states_tr, Ytr[n_drop:,:])
 
-# Compute the predictions
+# 计算预测
 Yhat = ridge.predict(states_te)
 
-# Finally, we plot the results.
+# 最后，我们绘制结果。
 
 fig = plt.figure(figsize=(14,4))
 plt.plot(Yte[n_drop:,:], 'k--', label="True", linewidth=2)
@@ -331,36 +331,36 @@ else:
 
 plt.close()
 
-# Fit the readout (GBRT)
+# 拟合读出层（GBRT）
 
-# - Mapping the Reservoir states to the desired output is a standard regression problem, which can be solved by one of the many standard regression models in [sklearn](https://scikit-learn.org/stable/supervised_learning.html).
-# - For example, we can use a Gradient Boost Regression Tree, which gives us predictions for different quantiles.
-# - In this way, we can compute confidence intervals in our predictions.
-# - This is a very simple way to implement probabilistic forecasting
-# - In the following, we will fit a different model for the 0.5, 0.05 and 0.95 quantiles, which will give us a 90\% confidence interval for our prediction.
+# - 将储层状态映射到期望的输出是一个标准的回归问题，可以使用 [sklearn](https://scikit-learn.org/stable/supervised_learning.html) 中的许多标准回归模型之一来解决。
+# - 例如，我们可以使用梯度提升回归树，它为我们提供不同分位数的预测。
+# - 通过这种方式，我们可以在预测中计算置信区间。
+# - 这是实现概率预测的一种非常简单的方法
+# - 在下面，我们将为 0.5、0.05 和 0.95 分位数拟合不同的模型，这将为我们提供 90\% 的预测置信区间。
 
-# Quantile 0.5
+# 分位数 0.5
 max_iter = 100
 gbrt_median = HistGradientBoostingRegressor(
     loss="quantile", quantile=0.5, max_iter=max_iter)
 gbrt_median.fit(states_tr, Ytr[n_drop:,0])
 median_predictions = gbrt_median.predict(states_te)
 
-# Quantile 0.05
+# 分位数 0.05
 gbrt_percentile_5 = HistGradientBoostingRegressor(
     loss="quantile", quantile=0.05, max_iter=max_iter)
 gbrt_percentile_5.fit(states_tr, Ytr[n_drop:,0])
 percentile_5_predictions = gbrt_percentile_5.predict(states_te)
 
-# Quantile 0.95
+# 分位数 0.95
 gbrt_percentile_95 = HistGradientBoostingRegressor(
     loss="quantile", quantile=0.95, max_iter=max_iter)
 gbrt_percentile_95.fit(states_tr, Ytr[n_drop:,0])
 percentile_95_predictions = gbrt_percentile_95.predict(states_te)
 
-# Plot the results with the confidence 90% confidence intervals.
+# 绘制带有 90% 置信区间的结果。
 
-# Plot the results
+# 绘制结果
 fig = plt.figure(figsize=(14,4))
 plt.plot(Yte[n_drop:,:], 'k--', label="True", linewidth=2)
 plt.plot(scaler.inverse_transform(median_predictions[:,None]), label="Median prediction", color="tab:blue")
