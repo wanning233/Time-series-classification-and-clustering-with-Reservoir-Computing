@@ -228,15 +228,37 @@ for n_layers in [2, 3, 4, 5, 6]:
         ari_decrease = ((1-ari_val/ari_original)*100)
         print(f"  ✗ ARI: 降低了 {ari_decrease:+.2f}% ({ari_val:.4f} vs {ari_original:.4f})")
 
-# 找出最佳层数
+# 找出串联层叠模型的最佳层数
 best_nmi_layer = max([2, 3, 4, 5, 6], key=lambda x: stacked_results[x]['nmi'])
 best_ari_layer = max([2, 3, 4, 5, 6], key=lambda x: stacked_results[x]['ari'])
 
 print("\n" + "=" * 100)
-print("最佳配置")
+print("串联层叠 RC 模型最佳配置")
 print("=" * 100)
 print(f"最佳NMI: {best_nmi_layer}层 (NMI = {stacked_results[best_nmi_layer]['nmi']:.4f})")
 print(f"最佳ARI: {best_ari_layer}层 (ARI = {stacked_results[best_ari_layer]['ari']:.4f})")
+
+# 多专家层叠模型的最佳配置
+best_me_nmi_key = max(multi_expert_results.keys(), key=lambda k: multi_expert_results[k]['nmi'])
+best_me_ari_key = max(multi_expert_results.keys(), key=lambda k: multi_expert_results[k]['ari'])
+best_me_nmi = multi_expert_results[best_me_nmi_key]
+best_me_ari = multi_expert_results[best_me_ari_key]
+
+print("\n" + "=" * 100)
+print("多专家 + 残差层叠 RC 模型最佳配置")
+print("=" * 100)
+print(f"最佳NMI: 层数 = {best_me_nmi_key[0]}, 专家数 = {best_me_nmi_key[1]} (NMI = {best_me_nmi['nmi']:.4f})")
+print(f"最佳ARI: 层数 = {best_me_ari_key[0]}, 专家数 = {best_me_ari_key[1]} (ARI = {best_me_ari['ari']:.4f})")
+
+# 综合对比：原始 RC vs 串联最佳 vs 多专家最佳
+print("\n" + "=" * 100)
+print("综合对比：原始 RC vs 最佳串联层叠 vs 最佳多专家层叠")
+print("=" * 100)
+print(f"{'模型':<20} {'NMI':<12} {'ARI':<12}")
+print("-" * 60)
+print(f"{'原始RC':<20} {nmi_original:<12.4f} {ari_original:<12.4f}")
+print(f"{'串联最佳层叠RC':<20} {stacked_results[best_nmi_layer]['nmi']:<12.4f} {stacked_results[best_ari_layer]['ari']:<12.4f}")
+print(f"{'多专家最佳层叠RC':<20} {best_me_nmi['nmi']:<12.4f} {best_me_ari['ari']:<12.4f}")
 
 # 层数趋势分析
 print("\n" + "=" * 100)
