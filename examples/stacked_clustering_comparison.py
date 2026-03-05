@@ -11,7 +11,7 @@ import scipy.spatial.distance as ssd
 from sklearn.metrics.pairwise import cosine_distances
 from sklearn.metrics import v_measure_score, adjusted_rand_score
 
-from reservoir_computing.modules import RC_model, StackedRC_model
+from reservoir_computing.modules import RC_model, StackedRC_model, MultiExpertStackedRC_model
 from reservoir_computing.datasets import ClfLoader
 
 # 设置随机种子以确保可重复性
@@ -63,6 +63,29 @@ for n_layers in [2, 3, 4, 5, 6]:
     stacked_models[n_layers] = rcm_stacked
     stacked_representations[n_layers] = mts_representations_stacked
 
+
+# ============ 多专家 + 残差层叠RC模型 ============
+print("\n3b. 训练多专家 + 残差层叠RC模型（3、5层，各 3 个专家）...")
+multi_expert_models = {}
+multi_expert_representations = {}
+
+for n_layers in [3, 5]:
+    print(f"\n   训练 多专家 {n_layers} 层层叠模型（n_experts=3）...")
+    rcm_me = MultiExpertStackedRC_model(
+        n_layers=n_layers,
+        n_experts=3,
+        reservoir_configs=None,  # 使用默认渐进式配置
+        mts_rep='mean',
+        readout_type=None  # 仅存储输入表示用于聚类
+    )
+
+    rcm_me.fit(X, verbose=False)
+    mts_repr_me = rcm_me.input_repr
+    print(f"   表示维度: {mts_repr_me.shape}")
+
+    multi_expert_models[n_layers] = rcm_me
+    multi_expert_representations[n_layers] = mts_repr_me
+
 # ============ 聚类评估 ============
 print("\n4. 进行聚类评估...")
 
@@ -112,22 +135,37 @@ for n_layers in [2, 3, 4, 5, 6]:
         'clust': clust
     }
 
+# 评估多专家层叠模型
+multi_expert_results = {}
+for n_layers in [3, 5]:
+    nmi, ari, n_clust, clust = evaluate_clustering(
+        multi_expert_representations[n_layers],
+        true_labels,
+        f"多专家层叠RC模型（{n_layers}层, 3专家）"
+    )
+    multi_expert_results[n_layers] = {
+        'nmi': nmi,
+        'ari': ari,
+        'n_clust': n_clust,
+        'clust': clust
+    }
+
 # ============ 结果对比 ============
 print("\n" + "=" * 80)
 print("结果对比总结")
 print("=" * 80)
 
-# 表头
-header = f"{'指标':<15} {'原始RC':<12} {'2层':<12} {'3层':<12} {'4层':<12} {'5层':<12} {'6层':<12}"
+# 表头（包括多专家 3/5 层）
+header = f"{'指标':<15} {'原始RC':<12} {'2层':<12} {'3层':<12} {'4层':<12} {'5层':<12} {'6层':<12} {'ME-3层':<12} {'ME-5层':<12}"
 print(f"\n{header}")
-print("-" * 100)
+print("-" * 140)
 
 # NMI对比
 nmi_row = f"{'NMI':<15} {nmi_original:<12.4f}"
 for n_layers in [2, 3, 4, 5, 6]:
     nmi_val = stacked_results[n_layers]['nmi']
-    improvement = nmi_val - nmi_original
     nmi_row += f" {nmi_val:<11.4f}"
+nmi_row += f" {multi_expert_results[3]['nmi']:<11.4f} {multi_expert_results[5]['nmi']:<11.4f}"
 print(nmi_row)
 
 # ARI对比
@@ -135,6 +173,7 @@ ari_row = f"{'ARI':<15} {ari_original:<12.4f}"
 for n_layers in [2, 3, 4, 5, 6]:
     ari_val = stacked_results[n_layers]['ari']
     ari_row += f" {ari_val:<11.4f}"
+ari_row += f" {multi_expert_results[3]['ari']:<11.4f} {multi_expert_results[5]['ari']:<11.4f}"
 print(ari_row)
 
 # 聚类数对比
@@ -142,6 +181,7 @@ clust_row = f"{'聚类数':<15} {n_clust_original:<12}"
 for n_layers in [2, 3, 4, 5, 6]:
     n_clust_val = stacked_results[n_layers]['n_clust']
     clust_row += f" {n_clust_val:<12}"
+clust_row += f" {multi_expert_results[3]['n_clust']:<12} {multi_expert_results[5]['n_clust']:<12}"
 print(clust_row)
 
 # 改进情况分析

@@ -946,3 +946,245 @@ class StackedRC_model(object):
             pred_class = np.argmax(pred_class, axis=1)
             
         return pred_class
+
+
+class MultiExpertStackedRC_model(object):
+    r"""多专家 + 残差式层叠储备池 RC 模型。
+
+    相比于 ``StackedRC_model`` 仅做简单串联，本模型在每一层内部引入多个并行的 Reservoir 专家，
+    并在读出阶段将各层的表示进行级联融合，从“多专家集成 + 多层残差”的角度提升表达能力，
+    缓解深层结构可能出现的性能退化。
+
+    设计要点：
+
+    - 每层包含 ``n_experts`` 个并行 Reservoir，输入相同但随机权重不同；
+    - 同一层内各专家的状态序列在特征维上拼接，作为下一层的输入；
+    - 每一层都会根据 ``mts_rep`` 生成整体表示（例如时间维 mean 或 last），并在读出前拼接所有层的表示，
+      得到最终的多尺度/残差式特征表示；
+    - 目前支持的表示方式：``'mean'``、``'last'``；暂不支持 ``'output'`` 与 ``'reservoir'``。
+
+    参数大体与 ``StackedRC_model`` 保持一致，额外增加：
+
+    :param n_experts: int (默认 ``3``)
+        每一层的并行 Reservoir 专家个数。
+    """
+
+    def __init__(self,
+                 # stacked reservoir
+                 n_layers=2,
+                 n_experts=3,
+                 reservoir_configs=None,
+                 n_drop=0,
+                 bidir=False,
+                 # dim red（当前版本不实现，可保持 None）
+                 dimred_method=None,
+                 n_dim=None,
+                 # representation
+                 mts_rep='mean',
+                 w_ridge_embedding=1.0,  # 占位参数，为接口一致暂不使用
+                 # readout
+                 readout_type='lin',
+                 w_ridge=1.0,
+                 mlp_layout=None,
+                 num_epochs=None,
+                 w_l2=None,
+                 nonlinearity=None,
+                 svm_gamma=1.0,
+                 svm_C=1.0):
+
+        self.n_layers = n_layers
+        self.n_experts = n_experts
+        self.n_drop = n_drop
+        self.bidir = bidir
+        self.dimred_method = dimred_method
+        self.mts_rep = mts_rep
+        self.readout_type = readout_type
+        self.svm_gamma = svm_gamma
+
+        if self.dimred_method is not None:
+            raise RuntimeError("当前版本的 MultiExpertStackedRC_model 尚未实现降维（dimred_method 必须为 None）")
+
+        # 处理储备池配置，与 StackedRC_model 保持一致
+        if reservoir_configs is None:
+            if n_layers == 2:
+                default_units = [200, 150]
+            elif n_layers == 3:
+                default_units = [300, 200, 150]
+            elif n_layers == 4:
+                default_units = [400, 300, 200, 150]
+            elif n_layers == 5:
+                default_units = [400, 350, 300, 200, 150]
+            elif n_layers == 6:
+                default_units = [400, 350, 300, 250, 200, 150]
+            else:
+                base_units = 400
+                default_units = [max(base_units - i * 50, 100) for i in range(n_layers)]
+
+            reservoir_configs = [
+                {
+                    'n_internal_units': units,
+                    'spectral_radius': 0.99,
+                    'leak': None,
+                    'connectivity': 0.3,
+                    'input_scaling': 0.2,
+                    'noise_level': 0.0,
+                    'circle': False
+                }
+                for units in default_units
+            ]
+        elif isinstance(reservoir_configs, dict):
+            reservoir_configs = [reservoir_configs.copy() for _ in range(n_layers)]
+        elif isinstance(reservoir_configs, list):
+            if len(reservoir_configs) != n_layers:
+                raise ValueError(f"reservoir_configs 列表长度({len(reservoir_configs)})必须等于 n_layers({n_layers})")
+        else:
+            raise ValueError("reservoir_configs 必须是 dict、list[dict] 或 None")
+
+        # 初始化多层多专家储备池：self._reservoirs[layer_idx][expert_idx]
+        self._reservoirs = []
+        for layer_idx, config in enumerate(reservoir_configs):
+            layer_reservoirs = []
+            for _ in range(self.n_experts):
+                reservoir = Reservoir(
+                    n_internal_units=config.get('n_internal_units', 100),
+                    spectral_radius=config.get('spectral_radius', 0.99),
+                    leak=config.get('leak', None),
+                    connectivity=config.get('connectivity', 0.3),
+                    input_scaling=config.get('input_scaling', 0.2),
+                    noise_level=config.get('noise_level', 0.0),
+                    circle=config.get('circle', False)
+                )
+                layer_reservoirs.append(reservoir)
+            self._reservoirs.append(layer_reservoirs)
+
+        # 初始化读出
+        if self.readout_type is not None:
+            if self.readout_type == 'lin':  # 岭回归
+                self.readout = Ridge(alpha=w_ridge)
+            elif self.readout_type == 'svm':  # SVM 读出
+                self.readout = SVC(C=svm_C, kernel='precomputed')
+            elif self.readout_type == 'mlp':  # MLP（深度读出）
+                self.readout = MLPClassifier(
+                    hidden_layer_sizes=mlp_layout,
+                    activation=nonlinearity,
+                    alpha=w_l2,
+                    batch_size=32,
+                    learning_rate='adaptive',
+                    learning_rate_init=0.001,
+                    max_iter=num_epochs,
+                    early_stopping=False,
+                    validation_fraction=0.0
+                )
+            else:
+                raise RuntimeError('Invalid readout type')
+
+    def _forward_layers(self, X):
+        """内部函数：多层多专家前向传播，返回各层的序列状态和层级表示。
+
+        返回:
+            layer_states_list: list，每个元素是该层拼接后的状态序列 [N, T, H_total]
+            layer_repr_list: list，每个元素是该层的整体表示 [N, H_total]
+        """
+        current_input = X  # [N, T, V] 或上一层的 [N, T, H_total]
+        layer_states_list = []
+        layer_repr_list = []
+
+        for layer_reservoirs in self._reservoirs:
+            expert_states = []
+            for reservoir in layer_reservoirs:
+                states = reservoir.get_states(current_input, n_drop=self.n_drop, bidir=self.bidir)
+                expert_states.append(states)
+
+            # 在特征维拼接各专家状态: [N, T, sum(H_e)]
+            layer_states = np.concatenate(expert_states, axis=2)
+
+            # 计算该层的整体表示（残差节点）
+            if self.mts_rep == 'mean':
+                layer_repr = np.mean(layer_states, axis=1)  # [N, H_total]
+            elif self.mts_rep == 'last':
+                layer_repr = layer_states[:, -1, :]  # [N, H_total]
+            else:
+                raise RuntimeError("MultiExpertStackedRC_model 当前仅支持 mts_rep 为 'mean' 或 'last'")
+
+            layer_states_list.append(layer_states)
+            layer_repr_list.append(layer_repr)
+
+            # 下一层输入为当前层的序列状态
+            current_input = layer_states
+
+        return layer_states_list, layer_repr_list
+
+    def fit(self, X, Y=None, verbose=True):
+        r"""训练多专家层叠 RC 模型。
+
+        参数:
+        -----------
+        X : np.ndarray
+            形状为 ``[N, T, V]`` 的数组，表示训练数据。
+
+        Y : np.ndarray
+            形状为 ``[N, C]`` 的数组，表示目标值。
+
+        verbose : bool
+            如果为 ``True``，打印训练时间。
+        """
+        time_start = time.time()
+
+        # 逐层前向，获得所有层的表示
+        _, layer_repr_list = self._forward_layers(X)
+
+        # 多层残差式融合：将所有层的表示在特征维拼接
+        input_repr = np.concatenate(layer_repr_list, axis=1)  # [N, sum_layers(H_total)]
+        self.input_repr = input_repr
+
+        # 训练读出
+        if self.readout_type is None:
+            # 仅存储表示，用于聚类或可视化
+            pass
+        elif self.readout_type == 'lin':
+            self.readout.fit(input_repr, Y)
+        elif self.readout_type == 'svm':
+            Ktr = squareform(pdist(input_repr, metric='sqeuclidean'))
+            Ktr = np.exp(-self.svm_gamma * Ktr)
+            self.readout.fit(Ktr, np.argmax(Y, axis=1))
+            self.input_repr_tr = input_repr
+        elif self.readout_type == 'mlp':
+            self.readout.fit(input_repr, Y)
+        else:
+            raise RuntimeError('Invalid readout type')
+
+        if verbose:
+            tot_time = (time.time() - time_start) / 60
+            print(f"Training completed in {tot_time:.2f} min")
+
+    def predict(self, Xte):
+        r"""计算样本外（测试）数据的预测。
+
+        参数:
+        -----------
+        Xte : np.ndarray
+            形状为 ``[N, T, V]`` 的数组，表示测试数据。
+
+        返回:
+        --------
+        pred_class : np.ndarray
+            形状为 ``[N]`` 的数组，表示预测的类别。
+        """
+        # 前向传播，获取各层表示
+        _, layer_repr_list_te = self._forward_layers(Xte)
+        input_repr_te = np.concatenate(layer_repr_list_te, axis=1)
+
+        if self.readout_type == 'lin':
+            logits = self.readout.predict(input_repr_te)
+            pred_class = np.argmax(logits, axis=1)
+        elif self.readout_type == 'svm':
+            Kte = cdist(input_repr_te, self.input_repr_tr, metric='sqeuclidean')
+            Kte = np.exp(-self.svm_gamma * Kte)
+            pred_class = self.readout.predict(Kte)
+        elif self.readout_type == 'mlp':
+            pred_class = self.readout.predict(input_repr_te)
+            pred_class = np.argmax(pred_class, axis=1)
+        else:
+            raise RuntimeError('Invalid readout type')
+
+        return pred_class
