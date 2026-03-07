@@ -1,8 +1,13 @@
 """
-层叠Reservoir与原始Reservoir的聚类效果对比实验
+四种Reservoir计算模型聚类效果对比实验
 
-本脚本对比了原始RC_model和层叠StackedRC_model在聚类任务上的表现。
-使用相同的聚类方法和评估指标，便于直接对比两种模型的聚类效果。
+本脚本对比了以下四种模型在聚类任务上的表现：
+1. RC_model: 原始单层Reservoir模型
+2. StackedRC_model: 层叠Reservoir模型
+3. MultiExpertStackedRC_model: 多专家+残差式层叠Reservoir模型
+4. MoEStackedRC_model: 混合专家（MoE）层叠Reservoir模型
+
+使用相同的聚类方法和评估指标，便于直接对比四种模型的聚类效果。
 """
 
 import numpy as np
@@ -11,14 +16,19 @@ import scipy.spatial.distance as ssd
 from sklearn.metrics.pairwise import cosine_distances
 from sklearn.metrics import v_measure_score, adjusted_rand_score
 
-from reservoir_computing.modules import RC_model, StackedRC_model, MultiExpertStackedRC_model
+from reservoir_computing.modules import (
+    RC_model, 
+    StackedRC_model, 
+    MultiExpertStackedRC_model,
+    MoEStackedRC_model
+)
 from reservoir_computing.datasets import ClfLoader
 
 # 设置随机种子以确保可重复性
 np.random.seed(0)
 
 print("=" * 60)
-print("层叠Reservoir与原始Reservoir聚类效果对比实验")
+print("四种Reservoir计算模型聚类效果对比实验")
 print("=" * 60)
 
 # 加载数据
@@ -98,6 +108,43 @@ for n_layers, n_experts in multi_expert_settings:
     multi_expert_models[(n_layers, n_experts)] = rcm_me
     multi_expert_representations[(n_layers, n_experts)] = mts_repr_me
 
+# ============ MoE混合专家层叠RC模型 ============
+print("\n3c. 训练MoE混合专家层叠RC模型（多种层数与专家数组合）...")
+moe_models = {}
+moe_representations = {}
+
+# 实验组合：[(层数, 专家数), ...]
+moe_settings = [
+    (2, 2),
+    (2, 3),
+    (3, 2),
+    (3, 3),
+    (3, 4),
+    (4, 2),
+    (4, 3),
+]
+
+for n_layers, n_experts in moe_settings:
+    print(f"\n   训练 MoE {n_layers} 层层叠模型（n_experts={n_experts}）...")
+    rcm_moe = MoEStackedRC_model(
+        n_layers=n_layers,
+        n_experts=n_experts,
+        reservoir_configs=None,  # 使用默认渐进式配置
+        gate_lr=0.01,
+        gate_epochs=100,  # 门控网络训练轮数
+        gate_reg=1e-4,
+        intra_gate_input='mean',
+        readout_type=None,  # 仅存储输入表示用于聚类
+        mts_rep='mean'
+    )
+
+    rcm_moe.fit(X, Y=None, verbose=False)
+    mts_repr_moe = rcm_moe.input_repr
+    print(f"   表示维度: {mts_repr_moe.shape}")
+
+    moe_models[(n_layers, n_experts)] = rcm_moe
+    moe_representations[(n_layers, n_experts)] = mts_repr_moe
+
 # ============ 聚类评估 ============
 print("\n4. 进行聚类评估...")
 
@@ -162,6 +209,21 @@ for n_layers, n_experts in multi_expert_settings:
         'clust': clust
     }
 
+# 评估MoE层叠模型
+moe_results = {}
+for n_layers, n_experts in moe_settings:
+    nmi, ari, n_clust, clust = evaluate_clustering(
+        moe_representations[(n_layers, n_experts)],
+        true_labels,
+        f"MoE层叠RC模型（{n_layers}层, {n_experts}专家）"
+    )
+    moe_results[(n_layers, n_experts)] = {
+        'nmi': nmi,
+        'ari': ari,
+        'n_clust': n_clust,
+        'clust': clust
+    }
+
 # ============ 结果对比 ============
 print("\n" + "=" * 80)
 print("结果对比总结（原始 RC 与串联层叠 RC）")
@@ -201,6 +263,16 @@ print(f"{'层数':<10} {'专家数':<10} {'NMI':<12} {'ARI':<12} {'聚类数':<1
 print("-" * 80)
 for n_layers, n_experts in multi_expert_settings:
     res = multi_expert_results[(n_layers, n_experts)]
+    print(f"{n_layers:<10} {n_experts:<10} {res['nmi']:<12.4f} {res['ari']:<12.4f} {res['n_clust']:<10}")
+
+# MoE层叠模型结果单独汇总
+print("\n" + "=" * 80)
+print("MoE混合专家层叠 RC 模型结果汇总")
+print("=" * 80)
+print(f"{'层数':<10} {'专家数':<10} {'NMI':<12} {'ARI':<12} {'聚类数':<10}")
+print("-" * 80)
+for n_layers, n_experts in moe_settings:
+    res = moe_results[(n_layers, n_experts)]
     print(f"{n_layers:<10} {n_experts:<10} {res['nmi']:<12.4f} {res['ari']:<12.4f} {res['n_clust']:<10}")
 
 # 改进情况分析
@@ -250,15 +322,28 @@ print("=" * 100)
 print(f"最佳NMI: 层数 = {best_me_nmi_key[0]}, 专家数 = {best_me_nmi_key[1]} (NMI = {best_me_nmi['nmi']:.4f})")
 print(f"最佳ARI: 层数 = {best_me_ari_key[0]}, 专家数 = {best_me_ari_key[1]} (ARI = {best_me_ari['ari']:.4f})")
 
-# 综合对比：原始 RC vs 串联最佳 vs 多专家最佳
+# MoE层叠模型的最佳配置
+best_moe_nmi_key = max(moe_results.keys(), key=lambda k: moe_results[k]['nmi'])
+best_moe_ari_key = max(moe_results.keys(), key=lambda k: moe_results[k]['ari'])
+best_moe_nmi = moe_results[best_moe_nmi_key]
+best_moe_ari = moe_results[best_moe_ari_key]
+
 print("\n" + "=" * 100)
-print("综合对比：原始 RC vs 最佳串联层叠 vs 最佳多专家层叠")
+print("MoE混合专家层叠 RC 模型最佳配置")
 print("=" * 100)
-print(f"{'模型':<20} {'NMI':<12} {'ARI':<12}")
+print(f"最佳NMI: 层数 = {best_moe_nmi_key[0]}, 专家数 = {best_moe_nmi_key[1]} (NMI = {best_moe_nmi['nmi']:.4f})")
+print(f"最佳ARI: 层数 = {best_moe_ari_key[0]}, 专家数 = {best_moe_ari_key[1]} (ARI = {best_moe_ari['ari']:.4f})")
+
+# 综合对比：原始 RC vs 串联最佳 vs 多专家最佳 vs MoE最佳
+print("\n" + "=" * 100)
+print("综合对比：四种模型最佳配置")
+print("=" * 100)
+print(f"{'模型':<25} {'NMI':<12} {'ARI':<12}")
 print("-" * 60)
-print(f"{'原始RC':<20} {nmi_original:<12.4f} {ari_original:<12.4f}")
-print(f"{'串联最佳层叠RC':<20} {stacked_results[best_nmi_layer]['nmi']:<12.4f} {stacked_results[best_ari_layer]['ari']:<12.4f}")
-print(f"{'多专家最佳层叠RC':<20} {best_me_nmi['nmi']:<12.4f} {best_me_ari['ari']:<12.4f}")
+print(f"{'原始RC':<25} {nmi_original:<12.4f} {ari_original:<12.4f}")
+print(f"{'串联最佳层叠RC':<25} {stacked_results[best_nmi_layer]['nmi']:<12.4f} {stacked_results[best_ari_layer]['ari']:<12.4f}")
+print(f"{'多专家最佳层叠RC':<25} {best_me_nmi['nmi']:<12.4f} {best_me_ari['ari']:<12.4f}")
+print(f"{'MoE最佳层叠RC':<25} {best_moe_nmi['nmi']:<12.4f} {best_moe_ari['ari']:<12.4f}")
 
 # 层数趋势分析
 print("\n" + "=" * 100)
@@ -278,5 +363,44 @@ for n_layers in [2, 3, 4, 5, 6]:
     print(f"{n_layers:<10} {nmi_val:<12.4f} {change_symbol_nmi} {nmi_change:+.4f} ({nmi_change*100:+.2f}%){'':<5} {ari_val:<12.4f} {change_symbol_ari} {ari_change:+.4f} ({ari_change*100:+.2f}%)")
     prev_nmi = nmi_val
     prev_ari = ari_val
+
+# ============ 四模型综合排名 ============
+print("\n" + "=" * 100)
+print("四模型综合排名（按NMI和ARI）")
+print("=" * 100)
+
+# 收集所有模型的最佳结果
+all_best_results = [
+    ('原始RC', nmi_original, ari_original, '单层'),
+    (f'串联层叠RC ({best_nmi_layer}层)', stacked_results[best_nmi_layer]['nmi'], stacked_results[best_ari_layer]['ari'], f'{best_nmi_layer}层'),
+    (f'多专家层叠RC ({best_me_nmi_key[0]}层,{best_me_nmi_key[1]}专家)', best_me_nmi['nmi'], best_me_ari['ari'], f'{best_me_nmi_key[0]}层{best_me_nmi_key[1]}专家'),
+    (f'MoE层叠RC ({best_moe_nmi_key[0]}层,{best_moe_nmi_key[1]}专家)', best_moe_nmi['nmi'], best_moe_ari['ari'], f'{best_moe_nmi_key[0]}层{best_moe_nmi_key[1]}专家'),
+]
+
+# 按NMI排序
+all_best_results_sorted_nmi = sorted(all_best_results, key=lambda x: x[1], reverse=True)
+print("\n按NMI排名:")
+print(f"{'排名':<6} {'模型':<35} {'NMI':<12} {'配置':<20}")
+print("-" * 80)
+for rank, (name, nmi, ari, config) in enumerate(all_best_results_sorted_nmi, 1):
+    print(f"{rank:<6} {name:<35} {nmi:<12.4f} {config:<20}")
+
+# 按ARI排序
+all_best_results_sorted_ari = sorted(all_best_results, key=lambda x: x[2], reverse=True)
+print("\n按ARI排名:")
+print(f"{'排名':<6} {'模型':<35} {'ARI':<12} {'配置':<20}")
+print("-" * 80)
+for rank, (name, nmi, ari, config) in enumerate(all_best_results_sorted_ari, 1):
+    print(f"{rank:<6} {name:<35} {ari:<12.4f} {config:<20}")
+
+# 找出总体最佳模型
+overall_best_nmi = max(all_best_results, key=lambda x: x[1])
+overall_best_ari = max(all_best_results, key=lambda x: x[2])
+
+print("\n" + "=" * 100)
+print("总体最佳模型")
+print("=" * 100)
+print(f"最佳NMI: {overall_best_nmi[0]} (NMI = {overall_best_nmi[1]:.4f})")
+print(f"最佳ARI: {overall_best_ari[0]} (ARI = {overall_best_ari[2]:.4f})")
 
 print("\n实验完成！")
