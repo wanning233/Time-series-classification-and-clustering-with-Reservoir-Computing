@@ -961,12 +961,21 @@ class MultiExpertStackedRC_model(object):
     - 同一层内各专家的状态序列在特征维上拼接，作为下一层的输入；
     - 每一层都会根据 ``mts_rep`` 生成整体表示（例如时间维 mean 或 last），并在读出前拼接所有层的表示，
       得到最终的多尺度/残差式特征表示；
-    - 目前支持的表示方式：``'mean'``、``'last'``；暂不支持 ``'output'`` 与 ``'reservoir'``。
+    - 支持的表示方式：``'mean'``、``'last'``、``'output'``、``'reservoir'``。
 
     参数大体与 ``StackedRC_model`` 保持一致，额外增加：
 
     :param n_experts: int (默认 ``3``)
         每一层的并行 Reservoir 专家个数。
+    
+    **降维参数:**
+    
+    :param dimred_method: str (默认 ``None``)
+        用于减少最后一层储备池状态序列中特征数量的过程。
+        可能的选项有：``None``（不进行降维）、``'pca'``（标准PCA）、
+        或 ``'tenpca'``（用于多变量时间序列数据的张量PCA）。
+    :param n_dim: int (默认 ``None``) 
+        降维过程后的结果维度数量。
     """
 
     def __init__(self,
@@ -1001,8 +1010,18 @@ class MultiExpertStackedRC_model(object):
         self.readout_type = readout_type
         self.svm_gamma = svm_gamma
 
-        if self.dimred_method is not None:
-            raise RuntimeError("当前版本的 MultiExpertStackedRC_model 尚未实现降维（dimred_method 必须为 None）")
+        # 初始化降维方法（用于最后一层）
+        if dimred_method is not None:
+            if dimred_method.lower() == 'pca':
+                self._dim_red = PCA(n_components=n_dim)            
+            elif dimred_method.lower() == 'tenpca':
+                self._dim_red = tensorPCA(n_components=n_dim)
+            else:
+                raise RuntimeError('Invalid dimred method ID')
+        
+        # 初始化岭回归模型（用于 output 和 reservoir 表示）
+        if mts_rep == 'output' or mts_rep == 'reservoir':
+            self._ridge_embedding = Ridge(alpha=w_ridge_embedding, fit_intercept=True)
 
         # 处理储备池配置，与 StackedRC_model 保持一致
         if reservoir_configs is None:
@@ -1078,18 +1097,25 @@ class MultiExpertStackedRC_model(object):
             else:
                 raise RuntimeError('Invalid readout type')
 
-    def _forward_layers(self, X):
+    def _forward_layers(self, X, X_original=None):
         """内部函数：多层多专家前向传播，返回各层的序列状态和层级表示。
+
+        参数:
+            X: 当前输入 [N, T, V] 或 [N, T, H]
+            X_original: 原始输入 [N, T, V]，用于 'output' 表示方法
 
         返回:
             layer_states_list: list，每个元素是该层拼接后的状态序列 [N, T, H_total]
             layer_repr_list: list，每个元素是该层的整体表示 [N, H_total]
         """
+        if X_original is None:
+            X_original = X  # 保存原始输入用于 'output' 表示
+        
         current_input = X  # [N, T, V] 或上一层的 [N, T, H_total]
         layer_states_list = []
         layer_repr_list = []
 
-        for layer_reservoirs in self._reservoirs:
+        for layer_idx, layer_reservoirs in enumerate(self._reservoirs):
             expert_states = []
             for reservoir in layer_reservoirs:
                 states = reservoir.get_states(current_input, n_drop=self.n_drop, bidir=self.bidir)
@@ -1103,8 +1129,41 @@ class MultiExpertStackedRC_model(object):
                 layer_repr = np.mean(layer_states, axis=1)  # [N, H_total]
             elif self.mts_rep == 'last':
                 layer_repr = layer_states[:, -1, :]  # [N, H_total]
+            elif self.mts_rep == 'output':
+                # 输出模型空间表示：用岭回归拟合从状态到原始输入的映射
+                # 对于第一层，使用原始输入 X_original；对于后续层，使用前一层状态
+                if layer_idx == 0:
+                    target_input = X_original
+                else:
+                    target_input = layer_states_list[layer_idx - 1]  # 使用前一层状态
+                
+                if self.bidir:
+                    target_input = np.concatenate((target_input, target_input[:, ::-1, :]), axis=2)
+                
+                coeff_list = []
+                biases_list = []
+                for i in range(layer_states.shape[0]):
+                    self._ridge_embedding.fit(
+                        layer_states[i, 0:-1, :], 
+                        target_input[i, self.n_drop+1:, :]
+                    )
+                    coeff_list.append(self._ridge_embedding.coef_.ravel())
+                    biases_list.append(self._ridge_embedding.intercept_.ravel())
+                layer_repr = np.concatenate((np.vstack(coeff_list), np.vstack(biases_list)), axis=1)
+            elif self.mts_rep == 'reservoir':
+                # 储备池模型空间表示：用岭回归拟合状态序列的自回归映射
+                coeff_list = []
+                biases_list = []
+                for i in range(layer_states.shape[0]):
+                    self._ridge_embedding.fit(
+                        layer_states[i, 0:-1, :], 
+                        layer_states[i, 1:, :]
+                    )
+                    coeff_list.append(self._ridge_embedding.coef_.ravel())
+                    biases_list.append(self._ridge_embedding.intercept_.ravel())
+                layer_repr = np.concatenate((np.vstack(coeff_list), np.vstack(biases_list)), axis=1)
             else:
-                raise RuntimeError("MultiExpertStackedRC_model 当前仅支持 mts_rep 为 'mean' 或 'last'")
+                raise RuntimeError(f"Invalid representation ID: {self.mts_rep}")
 
             layer_states_list.append(layer_states)
             layer_repr_list.append(layer_repr)
@@ -1130,8 +1189,63 @@ class MultiExpertStackedRC_model(object):
         """
         time_start = time.time()
 
-        # 逐层前向，获得所有层的表示
-        _, layer_repr_list = self._forward_layers(X)
+        # 逐层前向，获得所有层的状态序列和表示
+        layer_states_list, layer_repr_list = self._forward_layers(X, X_original=X)
+
+        # 对最后一层状态进行降维（如果启用）
+        if self.dimred_method is not None:
+            final_states = layer_states_list[-1]  # [N, T, H_total]
+            if self.dimred_method.lower() == 'pca':
+                # 矩阵化
+                N_samples = final_states.shape[0]
+                final_states = final_states.reshape(-1, final_states.shape[2])
+                # 变换
+                red_states = self._dim_red.fit_transform(final_states)
+                # 转换回张量形式
+                red_states = red_states.reshape(N_samples, -1, red_states.shape[1])
+            elif self.dimred_method.lower() == 'tenpca':
+                red_states = self._dim_red.fit_transform(final_states)
+            else:
+                red_states = final_states
+            
+            # 基于降维后的状态重新计算最后一层的表示
+            if self.mts_rep == 'mean':
+                layer_repr_list[-1] = np.mean(red_states, axis=1)
+            elif self.mts_rep == 'last':
+                layer_repr_list[-1] = red_states[:, -1, :]
+            elif self.mts_rep == 'output':
+                # 对于 output，使用降维后的状态预测目标
+                layer_idx = len(layer_states_list) - 1
+                if layer_idx == 0:
+                    target_input = X
+                else:
+                    target_input = layer_states_list[layer_idx - 1]
+                
+                if self.bidir:
+                    target_input = np.concatenate((target_input, target_input[:, ::-1, :]), axis=2)
+                
+                coeff_list = []
+                biases_list = []
+                for i in range(red_states.shape[0]):
+                    self._ridge_embedding.fit(
+                        red_states[i, 0:-1, :], 
+                        target_input[i, self.n_drop+1:, :]
+                    )
+                    coeff_list.append(self._ridge_embedding.coef_.ravel())
+                    biases_list.append(self._ridge_embedding.intercept_.ravel())
+                layer_repr_list[-1] = np.concatenate((np.vstack(coeff_list), np.vstack(biases_list)), axis=1)
+            elif self.mts_rep == 'reservoir':
+                # 对于 reservoir，使用降维后的状态计算自回归映射
+                coeff_list = []
+                biases_list = []
+                for i in range(red_states.shape[0]):
+                    self._ridge_embedding.fit(
+                        red_states[i, 0:-1, :], 
+                        red_states[i, 1:, :]
+                    )
+                    coeff_list.append(self._ridge_embedding.coef_.ravel())
+                    biases_list.append(self._ridge_embedding.intercept_.ravel())
+                layer_repr_list[-1] = np.concatenate((np.vstack(coeff_list), np.vstack(biases_list)), axis=1)
 
         # 多层残差式融合：将所有层的表示在特征维拼接
         input_repr = np.concatenate(layer_repr_list, axis=1)  # [N, sum_layers(H_total)]
@@ -1170,8 +1284,65 @@ class MultiExpertStackedRC_model(object):
         pred_class : np.ndarray
             形状为 ``[N]`` 的数组，表示预测的类别。
         """
-        # 前向传播，获取各层表示
-        _, layer_repr_list_te = self._forward_layers(Xte)
+        # 前向传播，获取各层状态序列和表示
+        layer_states_list_te, layer_repr_list_te = self._forward_layers(Xte, X_original=Xte)
+
+        # 对最后一层状态进行降维（如果启用）
+        if self.dimred_method is not None:
+            final_states_te = layer_states_list_te[-1]  # [N, T, H_total]
+            if self.dimred_method.lower() == 'pca':
+                # 矩阵化
+                N_samples_te = final_states_te.shape[0]
+                final_states_te = final_states_te.reshape(-1, final_states_te.shape[2])
+                # 变换
+                red_states_te = self._dim_red.transform(final_states_te)
+                # 转换回张量形式
+                red_states_te = red_states_te.reshape(N_samples_te, -1, red_states_te.shape[1])
+            elif self.dimred_method.lower() == 'tenpca':
+                red_states_te = self._dim_red.transform(final_states_te)
+            else:
+                red_states_te = final_states_te
+            
+            # 基于降维后的状态重新计算最后一层的表示
+            if self.mts_rep == 'mean':
+                layer_repr_list_te[-1] = np.mean(red_states_te, axis=1)
+            elif self.mts_rep == 'last':
+                layer_repr_list_te[-1] = red_states_te[:, -1, :]
+            elif self.mts_rep == 'output':
+                # 对于 output，使用降维后的状态预测目标
+                layer_idx = len(layer_states_list_te) - 1
+                if layer_idx == 0:
+                    target_input = Xte
+                else:
+                    target_input = layer_states_list_te[layer_idx - 1]
+                
+                if self.bidir:
+                    target_input = np.concatenate((target_input, target_input[:, ::-1, :]), axis=2)
+                
+                coeff_list = []
+                biases_list = []
+                for i in range(red_states_te.shape[0]):
+                    self._ridge_embedding.fit(
+                        red_states_te[i, 0:-1, :], 
+                        target_input[i, self.n_drop+1:, :]
+                    )
+                    coeff_list.append(self._ridge_embedding.coef_.ravel())
+                    biases_list.append(self._ridge_embedding.intercept_.ravel())
+                layer_repr_list_te[-1] = np.concatenate((np.vstack(coeff_list), np.vstack(biases_list)), axis=1)
+            elif self.mts_rep == 'reservoir':
+                # 对于 reservoir，使用降维后的状态计算自回归映射
+                coeff_list = []
+                biases_list = []
+                for i in range(red_states_te.shape[0]):
+                    self._ridge_embedding.fit(
+                        red_states_te[i, 0:-1, :], 
+                        red_states_te[i, 1:, :]
+                    )
+                    coeff_list.append(self._ridge_embedding.coef_.ravel())
+                    biases_list.append(self._ridge_embedding.intercept_.ravel())
+                layer_repr_list_te[-1] = np.concatenate((np.vstack(coeff_list), np.vstack(biases_list)), axis=1)
+
+        # 多层残差式融合：将所有层的表示在特征维拼接
         input_repr_te = np.concatenate(layer_repr_list_te, axis=1)
 
         if self.readout_type == 'lin':
