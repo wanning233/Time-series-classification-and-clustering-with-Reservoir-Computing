@@ -18,8 +18,17 @@ import os
 import pickle
 
 # 设置中文字体支持
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']  # 用来正常显示中文标签
+import matplotlib
+# 尝试多种中文字体，优先使用系统可用的字体
+try:
+    # macOS 系统字体
+    plt.rcParams['font.sans-serif'] = ['PingFang SC', 'STHeiti', 'Arial Unicode MS', 'SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+except:
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+
+# 确保字体设置生效
+matplotlib.rcParams.update({'font.size': 10})
 
 # 设置随机种子以确保可重复性
 np.random.seed(0)
@@ -109,36 +118,40 @@ def visualize_with_umap(representations, true_labels, cluster_labels, model_name
     reducer = umap.UMAP(n_components=2, random_state=42, n_neighbors=15, min_dist=0.1)
     embedding = reducer.fit_transform(representations)
     
-    # 创建图形，增加高度以确保标题和标签完整显示
-    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+    # 创建图形，增加宽度和高度以确保标题和标签完整显示
+    fig, axes = plt.subplots(1, 2, figsize=(20, 8))
     
     # 左图：真实标签
     scatter1 = axes[0].scatter(embedding[:, 0], embedding[:, 1], 
                                c=true_labels, cmap='tab10', s=30, alpha=0.6, edgecolors='k', linewidths=0.5)
     axes[0].set_title(f'{model_name} - 真实标签分布', fontsize=14, fontweight='bold', pad=15)
-    axes[0].set_xlabel('UMAP维度1', fontsize=12, labelpad=10)
-    axes[0].set_ylabel('UMAP维度2', fontsize=12, labelpad=10)
+    # 大幅增加 labelpad 确保轴标签完整显示
+    axes[0].set_xlabel('UMAP维度1', fontsize=12, labelpad=15)
+    axes[0].set_ylabel('UMAP维度2', fontsize=12, labelpad=15)
     axes[0].grid(True, alpha=0.3)
-    cbar1 = plt.colorbar(scatter1, ax=axes[0], label='类别标签', pad=0.02)
+    cbar1 = plt.colorbar(scatter1, ax=axes[0], label='类别标签', pad=0.05)
     cbar1.ax.tick_params(labelsize=10)
+    cbar1.set_label('类别标签', fontsize=11)
     
     # 右图：聚类结果
     scatter2 = axes[1].scatter(embedding[:, 0], embedding[:, 1], 
                                c=cluster_labels, cmap='tab10', s=30, alpha=0.6, edgecolors='k', linewidths=0.5)
     axes[1].set_title(f'{model_name} - 聚类结果分布', fontsize=14, fontweight='bold', pad=15)
-    axes[1].set_xlabel('UMAP维度1', fontsize=12, labelpad=10)
-    axes[1].set_ylabel('UMAP维度2', fontsize=12, labelpad=10)
+    # 大幅增加 labelpad 确保轴标签完整显示
+    axes[1].set_xlabel('UMAP维度1', fontsize=12, labelpad=15)
+    axes[1].set_ylabel('UMAP维度2', fontsize=12, labelpad=15)
     axes[1].grid(True, alpha=0.3)
-    cbar2 = plt.colorbar(scatter2, ax=axes[1], label='聚类标签', pad=0.02)
+    cbar2 = plt.colorbar(scatter2, ax=axes[1], label='聚类标签', pad=0.05)
     cbar2.ax.tick_params(labelsize=10)
+    cbar2.set_label('聚类标签', fontsize=11)
     
-    # 使用更大的padding确保所有元素都显示完整
-    plt.tight_layout(pad=3.0)
+    # 使用 subplots_adjust 手动调整布局，确保轴标签完整显示
+    plt.subplots_adjust(left=0.08, bottom=0.12, right=0.95, top=0.92, wspace=0.25)
     
     # 保存图片（使用安全的文件名）
     safe_model_name = model_name.replace(' ', '_').replace('（', '_').replace('）', '').replace('，', '_').replace(',', '_')
     save_path = os.path.join(save_dir, f'umap_{safe_model_name}.png')
-    plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.3)
     print(f"   已保存UMAP可视化图到: {save_path}")
     plt.close()
     
@@ -402,8 +415,8 @@ def create_comparison_visualization():
     ]
     
     # 创建2x4的子图（每行2个模型，共4个模型，每个模型显示真实标签和聚类结果）
-    # 增加图片尺寸和调整间距
-    fig, axes = plt.subplots(4, 2, figsize=(18, 28))
+    # 增加图片宽度，给轴标签更多空间，并增加高度
+    fig, axes = plt.subplots(4, 2, figsize=(20, 30))
     
     for idx, (model_name, representations, cluster_labels, nmi, ari) in enumerate(models_data):
         # UMAP降维
@@ -414,12 +427,15 @@ def create_comparison_visualization():
         scatter1 = axes[idx, 0].scatter(embedding[:, 0], embedding[:, 1], 
                                         c=true_labels, cmap='tab10', s=30, alpha=0.6, 
                                         edgecolors='k', linewidths=0.5)
-        axes[idx, 0].set_title(f'{model_name}\n真实标签分布', fontsize=13, fontweight='bold', pad=12)
-        axes[idx, 0].set_xlabel('UMAP维度1', fontsize=11, labelpad=8)
-        axes[idx, 0].set_ylabel('UMAP维度2', fontsize=11, labelpad=8)
+        axes[idx, 0].set_title(f'{model_name}\n真实标签分布', fontsize=13, fontweight='bold', pad=15)
+        # 大幅增加 labelpad 确保轴标签完整显示
+        axes[idx, 0].set_xlabel('UMAP维度1', fontsize=12, labelpad=15)
+        axes[idx, 0].set_ylabel('UMAP维度2', fontsize=12, labelpad=15)
         axes[idx, 0].grid(True, alpha=0.3)
-        cbar1 = plt.colorbar(scatter1, ax=axes[idx, 0], label='类别', pad=0.02)
+        cbar1 = plt.colorbar(scatter1, ax=axes[idx, 0], label='类别', pad=0.05)
         cbar1.ax.tick_params(labelsize=9)
+        # 设置 colorbar 标签字体
+        cbar1.set_label('类别', fontsize=10)
         
         # 右图：聚类结果
         scatter2 = axes[idx, 1].scatter(embedding[:, 0], embedding[:, 1], 
@@ -427,17 +443,23 @@ def create_comparison_visualization():
                                         edgecolors='k', linewidths=0.5)
         # 缩短标题以避免显示不全
         title_text = f'{model_name}\n聚类结果\nNMI={nmi:.4f}, ARI={ari:.4f}'
-        axes[idx, 1].set_title(title_text, fontsize=13, fontweight='bold', pad=12)
-        axes[idx, 1].set_xlabel('UMAP维度1', fontsize=11, labelpad=8)
-        axes[idx, 1].set_ylabel('UMAP维度2', fontsize=11, labelpad=8)
+        axes[idx, 1].set_title(title_text, fontsize=13, fontweight='bold', pad=15)
+        # 大幅增加 labelpad 确保轴标签完整显示
+        axes[idx, 1].set_xlabel('UMAP维度1', fontsize=12, labelpad=15)
+        axes[idx, 1].set_ylabel('UMAP维度2', fontsize=12, labelpad=15)
         axes[idx, 1].grid(True, alpha=0.3)
-        cbar2 = plt.colorbar(scatter2, ax=axes[idx, 1], label='聚类', pad=0.02)
+        cbar2 = plt.colorbar(scatter2, ax=axes[idx, 1], label='聚类', pad=0.05)
         cbar2.ax.tick_params(labelsize=9)
+        # 设置 colorbar 标签字体
+        cbar2.set_label('聚类', fontsize=10)
     
-    # 使用更大的padding确保所有元素都显示完整
-    plt.tight_layout(pad=4.0, h_pad=2.0, w_pad=2.0)
+    # 使用 subplots_adjust 手动调整布局，确保轴标签完整显示
+    # 增加底部和左侧边距，为轴标签留出空间
+    plt.subplots_adjust(left=0.08, bottom=0.05, right=0.95, top=0.97, hspace=0.35, wspace=0.25)
+    
     save_path = os.path.join('umap_visualizations', 'comparison_all_models.png')
-    plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+    # 使用更大的 bbox_inches 确保所有内容都保存
+    plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.5)
     print(f"已保存综合对比可视化图到: {save_path}")
     plt.close()
 
