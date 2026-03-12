@@ -15,6 +15,9 @@ from scipy.cluster.hierarchy import linkage, fcluster
 import scipy.spatial.distance as ssd
 from sklearn.metrics.pairwise import cosine_distances
 from sklearn.metrics import v_measure_score, adjusted_rand_score
+import matplotlib.pyplot as plt
+import umap
+import os
 
 from reservoir_computing.modules import (
     RC_model, 
@@ -166,11 +169,55 @@ def evaluate_clustering(representations, true_labels, model_name):
     
     return nmi, ari, n_clusters_found, clust
 
+def visualize_with_umap(representations, true_labels, cluster_labels, model_name, save_dir='umap_visualizations'):
+    """使用UMAP将高维表示降维到2D并可视化"""
+    # 创建保存目录
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # UMAP降维
+    print(f"\n   正在为{model_name}生成UMAP可视化...")
+    reducer = umap.UMAP(n_components=2, random_state=42, n_neighbors=15, min_dist=0.1)
+    embedding = reducer.fit_transform(representations)
+    
+    # 创建图形
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # 左图：真实标签
+    scatter1 = axes[0].scatter(embedding[:, 0], embedding[:, 1], 
+                               c=true_labels, cmap='tab10', s=30, alpha=0.6, edgecolors='k', linewidths=0.5)
+    axes[0].set_title(f'{model_name} - 真实标签分布', fontsize=14, fontweight='bold')
+    axes[0].set_xlabel('UMAP维度1', fontsize=12)
+    axes[0].set_ylabel('UMAP维度2', fontsize=12)
+    axes[0].grid(True, alpha=0.3)
+    plt.colorbar(scatter1, ax=axes[0], label='类别标签')
+    
+    # 右图：聚类结果
+    scatter2 = axes[1].scatter(embedding[:, 0], embedding[:, 1], 
+                               c=cluster_labels, cmap='tab10', s=30, alpha=0.6, edgecolors='k', linewidths=0.5)
+    axes[1].set_title(f'{model_name} - 聚类结果分布', fontsize=14, fontweight='bold')
+    axes[1].set_xlabel('UMAP维度1', fontsize=12)
+    axes[1].set_ylabel('UMAP维度2', fontsize=12)
+    axes[1].grid(True, alpha=0.3)
+    plt.colorbar(scatter2, ax=axes[1], label='聚类标签')
+    
+    plt.tight_layout()
+    
+    # 保存图片（使用安全的文件名）
+    safe_model_name = model_name.replace(' ', '_').replace('（', '_').replace('）', '').replace('，', '_').replace(',', '_')
+    save_path = os.path.join(save_dir, f'umap_{safe_model_name}.png')
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"   已保存UMAP可视化图到: {save_path}")
+    plt.close()
+    
+    return embedding
+
 # 评估原始模型
 true_labels = Y[:, 0]
 nmi_original, ari_original, n_clust_original, clust_original = evaluate_clustering(
     mts_representations_original, true_labels, "原始RC模型"
 )
+# UMAP可视化
+visualize_with_umap(mts_representations_original, true_labels, clust_original, "原始RC模型")
 
 # 评估层叠模型（6层）
 stacked_results = {}
@@ -186,6 +233,8 @@ stacked_results[n_layers] = {
     'n_clust': n_clust,
     'clust': clust
 }
+# UMAP可视化
+visualize_with_umap(stacked_representations[n_layers], true_labels, clust, f"层叠RC模型_{n_layers}层")
 
 # 评估多专家层叠模型
 multi_expert_results = {}
@@ -201,6 +250,13 @@ for n_layers, n_experts in multi_expert_settings:
         'n_clust': n_clust,
         'clust': clust
     }
+    # UMAP可视化
+    visualize_with_umap(
+        multi_expert_representations[(n_layers, n_experts)],
+        true_labels,
+        clust,
+        f"多专家层叠RC模型_{n_layers}层_{n_experts}专家"
+    )
 
 # 评估MoE层叠模型
 moe_results = {}
@@ -216,6 +272,13 @@ for n_layers, n_experts in moe_settings:
         'n_clust': n_clust,
         'clust': clust
     }
+    # UMAP可视化
+    visualize_with_umap(
+        moe_representations[(n_layers, n_experts)],
+        true_labels,
+        clust,
+        f"MoE层叠RC模型_{n_layers}层_{n_experts}专家"
+    )
 
 # ============ 结果对比 ============
 print("\n" + "=" * 80)
@@ -383,4 +446,65 @@ print("=" * 100)
 print(f"最佳NMI: {overall_best_nmi[0]} (NMI = {overall_best_nmi[1]:.4f})")
 print(f"最佳ARI: {overall_best_ari[0]} (ARI = {overall_best_ari[2]:.4f})")
 
-print("\n实验完成！")
+# ============ 综合对比可视化 ============
+print("\n" + "=" * 100)
+print("生成综合对比UMAP可视化...")
+print("=" * 100)
+
+def create_comparison_visualization():
+    """创建四种模型最佳配置的综合对比可视化"""
+    os.makedirs('umap_visualizations', exist_ok=True)
+    
+    # 准备数据
+    models_data = [
+        ('原始RC', mts_representations_original, clust_original, nmi_original, ari_original),
+        ('串联6层层叠RC', stacked_representations[6], stacked_results[6]['clust'], 
+         stacked_results[6]['nmi'], stacked_results[6]['ari']),
+        (f'多专家层叠RC({best_me_nmi_key[0]}层,{best_me_nmi_key[1]}专家)', 
+         multi_expert_representations[best_me_nmi_key], 
+         multi_expert_results[best_me_nmi_key]['clust'],
+         best_me_nmi['nmi'], best_me_ari['ari']),
+        (f'MoE层叠RC({best_moe_nmi_key[0]}层,{best_moe_nmi_key[1]}专家)',
+         moe_representations[best_moe_nmi_key],
+         moe_results[best_moe_nmi_key]['clust'],
+         best_moe_nmi['nmi'], best_moe_ari['ari'])
+    ]
+    
+    # 创建2x4的子图（每行2个模型，共4个模型，每个模型显示真实标签和聚类结果）
+    fig, axes = plt.subplots(4, 2, figsize=(16, 24))
+    
+    for idx, (model_name, representations, cluster_labels, nmi, ari) in enumerate(models_data):
+        # UMAP降维
+        reducer = umap.UMAP(n_components=2, random_state=42, n_neighbors=15, min_dist=0.1)
+        embedding = reducer.fit_transform(representations)
+        
+        # 左图：真实标签
+        scatter1 = axes[idx, 0].scatter(embedding[:, 0], embedding[:, 1], 
+                                        c=true_labels, cmap='tab10', s=30, alpha=0.6, 
+                                        edgecolors='k', linewidths=0.5)
+        axes[idx, 0].set_title(f'{model_name}\n真实标签分布', fontsize=12, fontweight='bold')
+        axes[idx, 0].set_xlabel('UMAP维度1', fontsize=10)
+        axes[idx, 0].set_ylabel('UMAP维度2', fontsize=10)
+        axes[idx, 0].grid(True, alpha=0.3)
+        plt.colorbar(scatter1, ax=axes[idx, 0], label='类别')
+        
+        # 右图：聚类结果
+        scatter2 = axes[idx, 1].scatter(embedding[:, 0], embedding[:, 1], 
+                                        c=cluster_labels, cmap='tab10', s=30, alpha=0.6, 
+                                        edgecolors='k', linewidths=0.5)
+        axes[idx, 1].set_title(f'{model_name}\n聚类结果 (NMI={nmi:.4f}, ARI={ari:.4f})', 
+                               fontsize=12, fontweight='bold')
+        axes[idx, 1].set_xlabel('UMAP维度1', fontsize=10)
+        axes[idx, 1].set_ylabel('UMAP维度2', fontsize=10)
+        axes[idx, 1].grid(True, alpha=0.3)
+        plt.colorbar(scatter2, ax=axes[idx, 1], label='聚类')
+    
+    plt.tight_layout()
+    save_path = os.path.join('umap_visualizations', 'comparison_all_models.png')
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"已保存综合对比可视化图到: {save_path}")
+    plt.close()
+
+create_comparison_visualization()
+
+print("\n实验完成！所有UMAP可视化图已保存到 umap_visualizations/ 目录")
