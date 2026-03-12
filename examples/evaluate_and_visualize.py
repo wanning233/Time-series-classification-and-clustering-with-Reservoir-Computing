@@ -1,13 +1,10 @@
 """
-四种Reservoir计算模型聚类效果对比实验
+加载已训练的模型表示向量，进行聚类评估和可视化
 
-本脚本对比了以下四种模型在聚类任务上的表现：
-1. RC_model: 原始单层Reservoir模型
-2. StackedRC_model: 层叠Reservoir模型
-3. MultiExpertStackedRC_model: 多专家+残差式层叠Reservoir模型
-4. MoEStackedRC_model: 混合专家（MoE）层叠Reservoir模型
-
-使用相同的聚类方法和评估指标，便于直接对比四种模型的聚类效果。
+本脚本从保存的文件中加载所有模型的表示向量，然后：
+1. 进行聚类评估（NMI, ARI）
+2. 生成UMAP可视化图
+3. 输出对比分析结果
 """
 
 import numpy as np
@@ -18,135 +15,64 @@ from sklearn.metrics import v_measure_score, adjusted_rand_score
 import matplotlib.pyplot as plt
 import umap
 import os
+import pickle
 
 # 设置中文字体支持
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
-from reservoir_computing.modules import (
-    RC_model, 
-    StackedRC_model, 
-    MultiExpertStackedRC_model,
-    MoEStackedRC_model
-)
-from reservoir_computing.datasets import ClfLoader
-
 # 设置随机种子以确保可重复性
 np.random.seed(0)
 
 print("=" * 60)
-print("四种Reservoir计算模型聚类效果对比实验")
+print("加载模型表示向量并进行聚类评估与可视化")
 print("=" * 60)
 
-# 加载数据
-print("\n1. 加载数据...")
-Xtr, Ytr, Xte, Yte = ClfLoader().get_data('Japanese_Vowels')
+# 加载保存的数据
+save_dir = 'saved_representations'
 
-# 由于进行聚类，不需要训练/测试分割
-X = np.concatenate((Xtr, Xte), axis=0)
-Y = np.concatenate((Ytr, Yte), axis=0)
+if not os.path.exists(save_dir):
+    print(f"\n错误：找不到保存目录 {save_dir}")
+    print("请先运行 train_models.py 训练模型并保存表示向量")
+    exit(1)
 
-print(f"   数据形状: {X.shape}")
-print(f"   类别数量: {len(np.unique(Y[:,0]))}")
+print("\n1. 加载保存的表示向量...")
 
-# ============ 原始RC模型 ============
-print("\n2. 训练原始RC模型...")
-rcm_original = RC_model(
-    n_internal_units=400,
-    readout_type=None  # 设置为None以存储输入表示
-)
+# 加载真实标签
+true_labels = np.load(os.path.join(save_dir, 'true_labels.npy'))
+print(f"   已加载真实标签: {true_labels.shape}")
 
-rcm_original.fit(X, verbose=True)
-mts_representations_original = rcm_original.input_repr
-print(f"   表示维度: {mts_representations_original.shape}")
+# 加载原始RC模型表示
+mts_representations_original = np.load(os.path.join(save_dir, 'original_rc_representation.npy'))
+print(f"   已加载原始RC模型表示: {mts_representations_original.shape}")
 
-# ============ 层叠RC模型 ============
-print("\n3. 训练层叠RC模型（6层）...")
-stacked_models = {}
-stacked_representations = {}
-
+# 加载层叠RC模型表示（6层）
 n_layers = 6
-print(f"\n   训练 {n_layers} 层层叠模型...")
-rcm_stacked = StackedRC_model(
-    n_layers=n_layers,
-    reservoir_configs=None,  # 使用默认渐进式配置
-    readout_type=None  # 设置为None以存储输入表示
-)
+mts_representations_stacked = np.load(os.path.join(save_dir, f'stacked_rc_{n_layers}layers_representation.npy'))
+print(f"   已加载层叠RC模型表示（{n_layers}层）: {mts_representations_stacked.shape}")
 
-rcm_stacked.fit(X, verbose=False)
-mts_representations_stacked = rcm_stacked.input_repr
-print(f"   表示维度: {mts_representations_stacked.shape}")
+# 加载多专家模型配置和表示
+with open(os.path.join(save_dir, 'multi_expert_settings.pkl'), 'rb') as f:
+    multi_expert_settings = pickle.load(f)
 
-stacked_models[n_layers] = rcm_stacked
-stacked_representations[n_layers] = mts_representations_stacked
-
-
-# ============ 多专家 + 残差层叠RC模型 ============
-print("\n3b. 训练多专家 + 残差层叠RC模型（6层，专家数递增：5, 10, 15, 20）...")
-multi_expert_models = {}
 multi_expert_representations = {}
-
-# 实验组合：固定6层，每层专家数分别为 5, 10, 15, 20
-multi_expert_settings = [
-    (6, 5),
-    (6, 10),
-    (6, 15),
-    (6, 20),
-]
-
 for n_layers, n_experts in multi_expert_settings:
-    print(f"\n   训练 多专家 {n_layers} 层层叠模型（n_experts={n_experts}）...")
-    rcm_me = MultiExpertStackedRC_model(
-        n_layers=n_layers,
-        n_experts=n_experts,
-        reservoir_configs=None,  # 使用默认渐进式配置
-        mts_rep='mean',
-        readout_type=None  # 仅存储输入表示用于聚类
-    )
+    filename = f'multi_expert_{n_layers}layers_{n_experts}experts_representation.npy'
+    multi_expert_representations[(n_layers, n_experts)] = np.load(os.path.join(save_dir, filename))
+    print(f"   已加载多专家模型表示（{n_layers}层, {n_experts}专家）: {multi_expert_representations[(n_layers, n_experts)].shape}")
 
-    rcm_me.fit(X, verbose=False)
-    mts_repr_me = rcm_me.input_repr
-    print(f"   表示维度: {mts_repr_me.shape}")
+# 加载MoE模型配置和表示
+with open(os.path.join(save_dir, 'moe_settings.pkl'), 'rb') as f:
+    moe_settings = pickle.load(f)
 
-    multi_expert_models[(n_layers, n_experts)] = rcm_me
-    multi_expert_representations[(n_layers, n_experts)] = mts_repr_me
-
-# ============ MoE混合专家层叠RC模型 ============
-print("\n3c. 训练MoE混合专家层叠RC模型（6层，专家数递增：5, 10, 15, 20）...")
-moe_models = {}
 moe_representations = {}
-
-# 实验组合：固定6层，每层专家数分别为 5, 10, 15, 20
-moe_settings = [
-    (6, 5),
-    (6, 10),
-    (6, 15),
-    (6, 20),
-]
-
 for n_layers, n_experts in moe_settings:
-    print(f"\n   训练 MoE {n_layers} 层层叠模型（n_experts={n_experts}）...")
-    rcm_moe = MoEStackedRC_model(
-        n_layers=n_layers,
-        n_experts=n_experts,
-        reservoir_configs=None,  # 使用默认渐进式配置
-        gate_lr=0.01,
-        gate_epochs=100,  # 门控网络训练轮数
-        gate_reg=1e-4,
-        intra_gate_input='mean',
-        readout_type=None,  # 仅存储输入表示用于聚类
-        mts_rep='mean'
-    )
-
-    rcm_moe.fit(X, Y=None, verbose=False)
-    mts_repr_moe = rcm_moe.input_repr
-    print(f"   表示维度: {mts_repr_moe.shape}")
-
-    moe_models[(n_layers, n_experts)] = rcm_moe
-    moe_representations[(n_layers, n_experts)] = mts_repr_moe
+    filename = f'moe_{n_layers}layers_{n_experts}experts_representation.npy'
+    moe_representations[(n_layers, n_experts)] = np.load(os.path.join(save_dir, filename))
+    print(f"   已加载MoE模型表示（{n_layers}层, {n_experts}专家）: {moe_representations[(n_layers, n_experts)].shape}")
 
 # ============ 聚类评估 ============
-print("\n4. 进行聚类评估...")
+print("\n2. 进行聚类评估...")
 
 def evaluate_clustering(representations, true_labels, model_name):
     """评估聚类效果"""
@@ -219,7 +145,6 @@ def visualize_with_umap(representations, true_labels, cluster_labels, model_name
     return embedding
 
 # 评估原始模型
-true_labels = Y[:, 0]
 nmi_original, ari_original, n_clust_original, clust_original = evaluate_clustering(
     mts_representations_original, true_labels, "原始RC模型"
 )
@@ -228,9 +153,8 @@ visualize_with_umap(mts_representations_original, true_labels, clust_original, "
 
 # 评估层叠模型（6层）
 stacked_results = {}
-n_layers = 6
 nmi, ari, n_clust, clust = evaluate_clustering(
-    stacked_representations[n_layers], 
+    mts_representations_stacked, 
     true_labels, 
     f"层叠RC模型（{n_layers}层）"
 )
@@ -241,7 +165,7 @@ stacked_results[n_layers] = {
     'clust': clust
 }
 # UMAP可视化
-visualize_with_umap(stacked_representations[n_layers], true_labels, clust, f"层叠RC模型_{n_layers}层")
+visualize_with_umap(mts_representations_stacked, true_labels, clust, f"层叠RC模型_{n_layers}层")
 
 # 评估多专家层叠模型
 multi_expert_results = {}
@@ -465,7 +389,7 @@ def create_comparison_visualization():
     # 准备数据
     models_data = [
         ('原始RC', mts_representations_original, clust_original, nmi_original, ari_original),
-        ('串联6层层叠RC', stacked_representations[6], stacked_results[6]['clust'], 
+        ('串联6层层叠RC', mts_representations_stacked, stacked_results[6]['clust'], 
          stacked_results[6]['nmi'], stacked_results[6]['ari']),
         (f'多专家层叠RC({best_me_nmi_key[0]}层,{best_me_nmi_key[1]}专家)', 
          multi_expert_representations[best_me_nmi_key], 
