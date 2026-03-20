@@ -258,13 +258,17 @@ def visualize_with_umap(representations, true_labels, cluster_labels, model_name
     
     return embedding
 
+# 根据是否支持中文决定模型名称
+use_chinese = selected_font is not None
+
 # 评估原始模型
 true_labels = Y[:, 0]
 nmi_original, ari_original, n_clust_original, clust_original = evaluate_clustering(
-    mts_representations_original, true_labels, "原始RC模型"
+    mts_representations_original, true_labels, "原始RC模型" if use_chinese else "Original RC"
 )
 # UMAP可视化
-visualize_with_umap(mts_representations_original, true_labels, clust_original, "原始RC模型")
+visualize_with_umap(mts_representations_original, true_labels, clust_original,
+                    "原始RC模型" if use_chinese else "Original_RC")
 
 # 评估层叠模型（6层）
 stacked_results = {}
@@ -272,7 +276,7 @@ n_layers = 6
 nmi, ari, n_clust, clust = evaluate_clustering(
     stacked_representations[n_layers], 
     true_labels, 
-    f"层叠RC模型（{n_layers}层）"
+    f"层叠RC模型（{n_layers}层）" if use_chinese else f"Stacked RC ({n_layers} layers)"
 )
 stacked_results[n_layers] = {
     'nmi': nmi,
@@ -281,7 +285,8 @@ stacked_results[n_layers] = {
     'clust': clust
 }
 # UMAP可视化
-visualize_with_umap(stacked_representations[n_layers], true_labels, clust, f"层叠RC模型_{n_layers}层")
+visualize_with_umap(stacked_representations[n_layers], true_labels, clust,
+                    f"层叠RC模型_{n_layers}层" if use_chinese else f"Stacked_RC_{n_layers}L")
 
 # 评估多专家层叠模型
 multi_expert_results = {}
@@ -289,7 +294,7 @@ for n_layers, n_experts in multi_expert_settings:
     nmi, ari, n_clust, clust = evaluate_clustering(
         multi_expert_representations[(n_layers, n_experts)],
         true_labels,
-        f"多专家层叠RC模型（{n_layers}层, {n_experts}专家）"
+        f"多专家层叠RC模型（{n_layers}层, {n_experts}专家）" if use_chinese else f"Multi-Expert RC ({n_layers}L, {n_experts}E)"
     )
     multi_expert_results[(n_layers, n_experts)] = {
         'nmi': nmi,
@@ -302,7 +307,7 @@ for n_layers, n_experts in multi_expert_settings:
         multi_expert_representations[(n_layers, n_experts)],
         true_labels,
         clust,
-        f"多专家层叠RC模型_{n_layers}层_{n_experts}专家"
+        f"多专家层叠RC模型_{n_layers}层_{n_experts}专家" if use_chinese else f"MultiExpert_RC_{n_layers}L_{n_experts}E"
     )
 
 # 评估MoE层叠模型
@@ -311,7 +316,7 @@ for n_layers, n_experts in moe_settings:
     nmi, ari, n_clust, clust = evaluate_clustering(
         moe_representations[(n_layers, n_experts)],
         true_labels,
-        f"MoE层叠RC模型（{n_layers}层, {n_experts}专家）"
+        f"MoE层叠RC模型（{n_layers}层, {n_experts}专家）" if use_chinese else f"MoE RC ({n_layers}L, {n_experts}E)"
     )
     moe_results[(n_layers, n_experts)] = {
         'nmi': nmi,
@@ -324,7 +329,7 @@ for n_layers, n_experts in moe_settings:
         moe_representations[(n_layers, n_experts)],
         true_labels,
         clust,
-        f"MoE层叠RC模型_{n_layers}层_{n_experts}专家"
+        f"MoE层叠RC模型_{n_layers}层_{n_experts}专家" if use_chinese else f"MoE_RC_{n_layers}L_{n_experts}E"
     )
 
 # ============ 结果对比 ============
