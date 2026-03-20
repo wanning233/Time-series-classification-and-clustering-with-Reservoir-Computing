@@ -18,9 +18,29 @@ from sklearn.metrics import v_measure_score, adjusted_rand_score
 import matplotlib.pyplot as plt
 import umap
 import os
+import matplotlib.font_manager as fm
 
-# 设置中文字体支持
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']  # 用来正常显示中文标签
+# 设置中文字体支持 - 尝试多种方式
+# 方式1: 尝试使用系统默认中文字体
+chinese_fonts = ['SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'Noto Sans CJK SC', 
+                 'Source Han Sans CN', 'PingFang SC', 'Heiti SC', 'Arial Unicode MS']
+
+# 获取系统中可用的字体
+available_fonts = [f.name for f in fm.fontManager.ttflist]
+selected_font = None
+
+for font in chinese_fonts:
+    if font in available_fonts:
+        selected_font = font
+        break
+
+if selected_font:
+    plt.rcParams['font.sans-serif'] = [selected_font] + plt.rcParams['font.sans-serif']
+    print(f"使用字体: {selected_font}")
+else:
+    # 方式2: 使用matplotlib的默认字体，但避免中文
+    print("警告: 未找到中文字体，将使用英文标签")
+
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 from reservoir_computing.modules import (
@@ -183,27 +203,47 @@ def visualize_with_umap(representations, true_labels, cluster_labels, model_name
     reducer = umap.UMAP(n_components=2, random_state=42, n_neighbors=15, min_dist=0.1)
     embedding = reducer.fit_transform(representations)
     
+    # 检查是否支持中文
+    use_chinese = selected_font is not None
+    
+    if use_chinese:
+        # 中文标签
+        title_true = f'{model_name} - 真实标签分布'
+        title_cluster = f'{model_name} - 聚类结果分布'
+        xlabel = 'UMAP维度1'
+        ylabel = 'UMAP维度2'
+        label_true = '类别标签'
+        label_cluster = '聚类标签'
+    else:
+        # 英文标签（避免乱码）
+        title_true = f'{model_name} - True Labels'
+        title_cluster = f'{model_name} - Clustering Results'
+        xlabel = 'UMAP Dimension 1'
+        ylabel = 'UMAP Dimension 2'
+        label_true = 'True Class'
+        label_cluster = 'Cluster'
+    
     # 创建图形，增加高度以确保标题和标签完整显示
     fig, axes = plt.subplots(1, 2, figsize=(18, 7))
     
     # 左图：真实标签
     scatter1 = axes[0].scatter(embedding[:, 0], embedding[:, 1], 
                                c=true_labels, cmap='tab10', s=30, alpha=0.6, edgecolors='k', linewidths=0.5)
-    axes[0].set_title(f'{model_name} - 真实标签分布', fontsize=14, fontweight='bold', pad=15)
-    axes[0].set_xlabel('UMAP维度1', fontsize=12, labelpad=10)
-    axes[0].set_ylabel('UMAP维度2', fontsize=12, labelpad=10)
+    axes[0].set_title(title_true, fontsize=14, fontweight='bold', pad=15)
+    axes[0].set_xlabel(xlabel, fontsize=12, labelpad=10)
+    axes[0].set_ylabel(ylabel, fontsize=12, labelpad=10)
     axes[0].grid(True, alpha=0.3)
-    cbar1 = plt.colorbar(scatter1, ax=axes[0], label='类别标签', pad=0.02)
+    cbar1 = plt.colorbar(scatter1, ax=axes[0], label=label_true, pad=0.02)
     cbar1.ax.tick_params(labelsize=10)
     
     # 右图：聚类结果
     scatter2 = axes[1].scatter(embedding[:, 0], embedding[:, 1], 
                                c=cluster_labels, cmap='tab10', s=30, alpha=0.6, edgecolors='k', linewidths=0.5)
-    axes[1].set_title(f'{model_name} - 聚类结果分布', fontsize=14, fontweight='bold', pad=15)
-    axes[1].set_xlabel('UMAP维度1', fontsize=12, labelpad=10)
-    axes[1].set_ylabel('UMAP维度2', fontsize=12, labelpad=10)
+    axes[1].set_title(title_cluster, fontsize=14, fontweight='bold', pad=15)
+    axes[1].set_xlabel(xlabel, fontsize=12, labelpad=10)
+    axes[1].set_ylabel(ylabel, fontsize=12, labelpad=10)
     axes[1].grid(True, alpha=0.3)
-    cbar2 = plt.colorbar(scatter2, ax=axes[1], label='聚类标签', pad=0.02)
+    cbar2 = plt.colorbar(scatter2, ax=axes[1], label=label_cluster, pad=0.02)
     cbar2.ax.tick_params(labelsize=10)
     
     # 使用更大的padding确保所有元素都显示完整
@@ -462,20 +502,51 @@ def create_comparison_visualization():
     """创建四种模型最佳配置的综合对比可视化"""
     os.makedirs('umap_visualizations', exist_ok=True)
     
-    # 准备数据
-    models_data = [
-        ('原始RC', mts_representations_original, clust_original, nmi_original, ari_original),
-        ('串联6层层叠RC', stacked_representations[6], stacked_results[6]['clust'], 
-         stacked_results[6]['nmi'], stacked_results[6]['ari']),
-        (f'多专家层叠RC({best_me_nmi_key[0]}层,{best_me_nmi_key[1]}专家)', 
-         multi_expert_representations[best_me_nmi_key], 
-         multi_expert_results[best_me_nmi_key]['clust'],
-         best_me_nmi['nmi'], best_me_ari['ari']),
-        (f'MoE层叠RC({best_moe_nmi_key[0]}层,{best_moe_nmi_key[1]}专家)',
-         moe_representations[best_moe_nmi_key],
-         moe_results[best_moe_nmi_key]['clust'],
-         best_moe_nmi['nmi'], best_moe_ari['ari'])
-    ]
+    # 检查是否支持中文
+    use_chinese = selected_font is not None
+    
+    if use_chinese:
+        # 中文模型名称
+        models_data = [
+            ('原始RC', mts_representations_original, clust_original, nmi_original, ari_original),
+            ('串联6层层叠RC', stacked_representations[6], stacked_results[6]['clust'], 
+             stacked_results[6]['nmi'], stacked_results[6]['ari']),
+            (f'多专家层叠RC({best_me_nmi_key[0]}层,{best_me_nmi_key[1]}专家)', 
+             multi_expert_representations[best_me_nmi_key], 
+             multi_expert_results[best_me_nmi_key]['clust'],
+             best_me_nmi['nmi'], best_me_ari['ari']),
+            (f'MoE层叠RC({best_moe_nmi_key[0]}层,{best_moe_nmi_key[1]}专家)',
+             moe_representations[best_moe_nmi_key],
+             moe_results[best_moe_nmi_key]['clust'],
+             best_moe_nmi['nmi'], best_moe_ari['ari'])
+        ]
+        title_true_suffix = '真实标签分布'
+        title_cluster_suffix = '聚类结果'
+        xlabel = 'UMAP维度1'
+        ylabel = 'UMAP维度2'
+        label_true = '类别'
+        label_cluster = '聚类'
+    else:
+        # 英文模型名称（避免乱码）
+        models_data = [
+            ('Original RC', mts_representations_original, clust_original, nmi_original, ari_original),
+            ('Stacked RC (6 layers)', stacked_representations[6], stacked_results[6]['clust'], 
+             stacked_results[6]['nmi'], stacked_results[6]['ari']),
+            (f'Multi-Expert RC ({best_me_nmi_key[0]}L,{best_me_nmi_key[1]}E)', 
+             multi_expert_representations[best_me_nmi_key], 
+             multi_expert_results[best_me_nmi_key]['clust'],
+             best_me_nmi['nmi'], best_me_ari['ari']),
+            (f'MoE RC ({best_moe_nmi_key[0]}L,{best_moe_nmi_key[1]}E)',
+             moe_representations[best_moe_nmi_key],
+             moe_results[best_moe_nmi_key]['clust'],
+             best_moe_nmi['nmi'], best_moe_ari['ari'])
+        ]
+        title_true_suffix = 'True Labels'
+        title_cluster_suffix = 'Clustering Results'
+        xlabel = 'UMAP Dimension 1'
+        ylabel = 'UMAP Dimension 2'
+        label_true = 'True Class'
+        label_cluster = 'Cluster'
     
     # 创建2x4的子图（每行2个模型，共4个模型，每个模型显示真实标签和聚类结果）
     # 增加图片尺寸和调整间距
@@ -490,11 +561,11 @@ def create_comparison_visualization():
         scatter1 = axes[idx, 0].scatter(embedding[:, 0], embedding[:, 1], 
                                         c=true_labels, cmap='tab10', s=30, alpha=0.6, 
                                         edgecolors='k', linewidths=0.5)
-        axes[idx, 0].set_title(f'{model_name}\n真实标签分布', fontsize=13, fontweight='bold', pad=12)
-        axes[idx, 0].set_xlabel('UMAP维度1', fontsize=11, labelpad=8)
-        axes[idx, 0].set_ylabel('UMAP维度2', fontsize=11, labelpad=8)
+        axes[idx, 0].set_title(f'{model_name}\n{title_true_suffix}', fontsize=13, fontweight='bold', pad=12)
+        axes[idx, 0].set_xlabel(xlabel, fontsize=11, labelpad=8)
+        axes[idx, 0].set_ylabel(ylabel, fontsize=11, labelpad=8)
         axes[idx, 0].grid(True, alpha=0.3)
-        cbar1 = plt.colorbar(scatter1, ax=axes[idx, 0], label='类别', pad=0.02)
+        cbar1 = plt.colorbar(scatter1, ax=axes[idx, 0], label=label_true, pad=0.02)
         cbar1.ax.tick_params(labelsize=9)
         
         # 右图：聚类结果
@@ -502,12 +573,12 @@ def create_comparison_visualization():
                                         c=cluster_labels, cmap='tab10', s=30, alpha=0.6, 
                                         edgecolors='k', linewidths=0.5)
         # 缩短标题以避免显示不全
-        title_text = f'{model_name}\n聚类结果\nNMI={nmi:.4f}, ARI={ari:.4f}'
+        title_text = f'{model_name}\n{title_cluster_suffix}\nNMI={nmi:.4f}, ARI={ari:.4f}'
         axes[idx, 1].set_title(title_text, fontsize=13, fontweight='bold', pad=12)
-        axes[idx, 1].set_xlabel('UMAP维度1', fontsize=11, labelpad=8)
-        axes[idx, 1].set_ylabel('UMAP维度2', fontsize=11, labelpad=8)
+        axes[idx, 1].set_xlabel(xlabel, fontsize=11, labelpad=8)
+        axes[idx, 1].set_ylabel(ylabel, fontsize=11, labelpad=8)
         axes[idx, 1].grid(True, alpha=0.3)
-        cbar2 = plt.colorbar(scatter2, ax=axes[idx, 1], label='聚类', pad=0.02)
+        cbar2 = plt.colorbar(scatter2, ax=axes[idx, 1], label=label_cluster, pad=0.02)
         cbar2.ax.tick_params(labelsize=9)
     
     # 使用更大的padding确保所有元素都显示完整
