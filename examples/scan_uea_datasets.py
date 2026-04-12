@@ -8,84 +8,81 @@
 - 样本总数在 200-3000 之间
 - 时间步 T 在 20-300 之间
 
-依赖：pip install aeon requests beautifulsoup4
+依赖：pip install aeon
 """
 
 import warnings
 warnings.filterwarnings('ignore')
 import numpy as np
-import requests
 
-# ── 第一步：从官网抓取完整数据集列表 ─────────────────────────────────────
-def fetch_dataset_list():
-    """从 timeseriesclassification.com 抓取所有多变量数据集名称"""
-    print("正在从官网获取完整数据集列表...")
-    try:
-        from bs4 import BeautifulSoup
+# ── 获取完整数据集列表 ────────────────────────────────────────────────────
+def get_all_dataset_names():
+    """尝试多种方式获取 aeon 支持的全部数据集名称"""
 
-        # 尝试多个可能的URL
-        urls = [
-            "https://www.timeseriesclassification.com/index.php",
-            "https://www.timeseriesclassification.com/dataset.php",
-            "http://www.timeseriesclassification.com/index.php",
-        ]
-
-        html = None
-        for url in urls:
-            try:
-                r = requests.get(url, timeout=15,
-                                 headers={'User-Agent': 'Mozilla/5.0'})
-                if r.status_code == 200 and len(r.text) > 500:
-                    html = r.text
-                    print(f"  成功访问: {url} (长度={len(html)})")
-                    break
-            except Exception as e:
-                print(f"  {url} 失败: {e}")
-
-        if not html:
-            print("所有URL均无法访问")
-            return None
-
-        # 调试：打印前500字符和所有链接
-        print(f"\n--- HTML前300字符 ---\n{html[:300]}\n---")
-
-        soup = BeautifulSoup(html, 'html.parser')
-        all_links = [(a.get('href',''), a.text.strip())
-                     for a in soup.find_all('a', href=True)]
-        print(f"页面共有 {len(all_links)} 个链接，前10个：")
-        for href, text in all_links[:10]:
-            print(f"  href={href!r}  text={text!r}")
-
-        # 尝试多种链接格式
-        names = []
-        patterns = ['Dataset=', 'dataset=', 'd=', 'name=']
-        for href, text in all_links:
-            for pat in patterns:
-                if pat in href:
-                    name = href.split(pat)[-1].split('&')[0].strip()
-                    if name and len(name) > 2:
-                        names.append(name)
-                    break
-
-        names = sorted(set(names))
-        print(f"官网共找到 {len(names)} 个数据集")
-        return names if names else None
-
-    except Exception as e:
-        print(f"官网抓取失败({e})，使用 aeon 内置列表")
-        return None
-
-# ── 第二步：aeon 内置列表（备用）────────────────────────────────────────
-def get_aeon_list():
+    # 方式1：aeon 内置的完整列表变量
+    names = set()
     try:
         from aeon.datasets.tsc_datasets import multivariate
-        print(f"aeon 内置多变量数据集: {len(multivariate)} 个")
-        return sorted(multivariate)
+        names |= set(multivariate)
+        print(f"  aeon multivariate: {len(multivariate)} 个")
     except Exception as e:
-        print(f"aeon 列表获取失败: {e}")
-        return []
+        print(f"  aeon multivariate 失败: {e}")
 
-# ── 第三步：用 aeon 逐个加载并检查 ──────────────────────────────────────
+    try:
+        from aeon.datasets.tsc_datasets import univariate
+        # 不加单变量，只打印数量
+        print(f"  aeon univariate: {len(univariate)} 个（不纳入扫描）")
+    except Exception as e:
+        print(f"  aeon univariate 失败: {e}")
+
+    # 方式2：aeon 的 dataset_collections 或 all_datasets
+    try:
+        from aeon.datasets.tsc_datasets import multivariate_equal_length
+        names |= set(multivariate_equal_length)
+        print(f"  aeon multivariate_equal_length: {len(multivariate_equal_length)} 个")
+    except Exception as e:
+        print(f"  aeon multivariate_equal_length 不存在: {e}")
+
+    try:
+        import aeon.datasets.tsc_datasets as tsc
+        # 打印模块里所有变量名，找完整列表
+        attrs = [a for a in dir(tsc) if not a.startswith('_')]
+        print(f"  tsc_datasets 模块中的变量: {attrs}")
+        for attr in attrs:
+            val = getattr(tsc, attr)
+            if isinstance(val, (list, tuple, set)) and len(val) > 10:
+                names |= set(val)
+                print(f"    {attr}: {len(val)} 个")
+    except Exception as e:
+        print(f"  模块扫描失败: {e}")
+
+    # 方式3：aeon 的 list_datasets 函数
+    try:
+        from aeon.datasets import list_datasets
+        all_ds = list_datasets()
+        names |= set(all_ds)
+        print(f"  list_datasets(): {len(all_ds)} 个")
+    except Exception as e:
+        print(f"  list_datasets 不存在: {e}")
+
+    # 方式4：查看 aeon 的数据集注册表
+    try:
+        from aeon.registry import all_estimators
+        print(f"  registry 可用")
+    except Exception as e:
+        print(f"  registry 失败: {e}")
+
+    try:
+        import aeon.datasets as ad
+        attrs = [a for a in dir(ad) if not a.startswith('_')]
+        print(f"  aeon.datasets 模块变量: {[a for a in attrs if 'dataset' in a.lower() or 'list' in a.lower()]}")
+    except Exception as e:
+        print(f"  aeon.datasets 扫描失败: {e}")
+
+    return sorted(names)
+
+
+# ── 扫描并筛选 ────────────────────────────────────────────────────────────
 def scan(dataset_names):
     try:
         from aeon.datasets import load_classification
@@ -110,7 +107,6 @@ def scan(dataset_names):
             X_tr, y_tr = load_classification(name, split="train")
             X_te, y_te = load_classification(name, split="test")
 
-            # aeon 返回形状 (N, V, T)
             n_tot = X_tr.shape[0] + X_te.shape[0]
             n_dim = X_tr.shape[1]
             t_len = X_tr.shape[2]
@@ -161,12 +157,11 @@ def scan(dataset_names):
 
 # ── 主流程 ───────────────────────────────────────────────────────────────
 if __name__ == '__main__':
-    # 优先从官网抓完整列表，失败则用 aeon 内置列表
-    names = fetch_dataset_list()
-    if not names:
-        names = get_aeon_list()
+    print("正在获取数据集列表...\n")
+    names = get_all_dataset_names()
+    print(f"\n最终合并列表: {len(names)} 个数据集\n")
 
     if names:
         scan(names)
     else:
-        print("无法获取数据集列表，请检查网络或 aeon 安装。")
+        print("无法获取数据集列表")
