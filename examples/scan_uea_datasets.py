@@ -17,68 +17,43 @@ import numpy as np
 
 # ── 获取完整数据集列表 ────────────────────────────────────────────────────
 def get_all_dataset_names():
-    """尝试多种方式获取 aeon 支持的全部数据集名称"""
+    """获取所有多变量时间序列数据集名称（合并所有多变量列表，去除单变量）"""
+    import aeon.datasets.tsc_datasets as tsc
 
-    # 方式1：aeon 内置的完整列表变量
-    names = set()
-    try:
-        from aeon.datasets.tsc_datasets import multivariate
-        names |= set(multivariate)
-        print(f"  aeon multivariate: {len(multivariate)} 个")
-    except Exception as e:
-        print(f"  aeon multivariate 失败: {e}")
+    # 收集所有多变量相关列表
+    MULTIVARIATE_KEYS = [
+        'multivariate',
+        'multivariate_equal_length',
+        'multivariate_unequal_length',
+        'multiverse2026',
+        'multiverse_core',
+        'UEA',
+    ]
+    # 单变量列表（用于排除）
+    UNIVARIATE_KEYS = [
+        'univariate', 'univariate2015', 'UCR2015', 'UCR2019',
+        'univariate_equal_length', 'univariate_variable_length',
+        'univariate_missing_values',
+    ]
 
-    try:
-        from aeon.datasets.tsc_datasets import univariate
-        # 不加单变量，只打印数量
-        print(f"  aeon univariate: {len(univariate)} 个（不纳入扫描）")
-    except Exception as e:
-        print(f"  aeon univariate 失败: {e}")
+    multivariate_names = set()
+    univariate_names   = set()
 
-    # 方式2：aeon 的 dataset_collections 或 all_datasets
-    try:
-        from aeon.datasets.tsc_datasets import multivariate_equal_length
-        names |= set(multivariate_equal_length)
-        print(f"  aeon multivariate_equal_length: {len(multivariate_equal_length)} 个")
-    except Exception as e:
-        print(f"  aeon multivariate_equal_length 不存在: {e}")
+    for key in MULTIVARIATE_KEYS:
+        val = getattr(tsc, key, None)
+        if val and isinstance(val, (list, tuple, set)):
+            multivariate_names |= set(val)
+            print(f"  {key}: {len(val)} 个")
 
-    try:
-        import aeon.datasets.tsc_datasets as tsc
-        # 打印模块里所有变量名，找完整列表
-        attrs = [a for a in dir(tsc) if not a.startswith('_')]
-        print(f"  tsc_datasets 模块中的变量: {attrs}")
-        for attr in attrs:
-            val = getattr(tsc, attr)
-            if isinstance(val, (list, tuple, set)) and len(val) > 10:
-                names |= set(val)
-                print(f"    {attr}: {len(val)} 个")
-    except Exception as e:
-        print(f"  模块扫描失败: {e}")
+    for key in UNIVARIATE_KEYS:
+        val = getattr(tsc, key, None)
+        if val and isinstance(val, (list, tuple, set)):
+            univariate_names |= set(val)
 
-    # 方式3：aeon 的 list_datasets 函数
-    try:
-        from aeon.datasets import list_datasets
-        all_ds = list_datasets()
-        names |= set(all_ds)
-        print(f"  list_datasets(): {len(all_ds)} 个")
-    except Exception as e:
-        print(f"  list_datasets 不存在: {e}")
-
-    # 方式4：查看 aeon 的数据集注册表
-    try:
-        from aeon.registry import all_estimators
-        print(f"  registry 可用")
-    except Exception as e:
-        print(f"  registry 失败: {e}")
-
-    try:
-        import aeon.datasets as ad
-        attrs = [a for a in dir(ad) if not a.startswith('_')]
-        print(f"  aeon.datasets 模块变量: {[a for a in attrs if 'dataset' in a.lower() or 'list' in a.lower()]}")
-    except Exception as e:
-        print(f"  aeon.datasets 扫描失败: {e}")
-
+    # 只保留多变量、排除纯单变量
+    names = multivariate_names - univariate_names
+    print(f"\n  多变量合并去重: {len(multivariate_names)} 个")
+    print(f"  排除单变量后:   {len(names)} 个")
     return sorted(names)
 
 
