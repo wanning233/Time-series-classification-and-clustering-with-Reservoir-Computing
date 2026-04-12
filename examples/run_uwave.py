@@ -46,18 +46,27 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 DS_NAME  = 'UWAVE'
 DS_LABEL = 'UWAVE'
 
+# UWAVE 时序长(315步)，储备池缩至100
+_U = 100
+_CFG5 = [{'n_internal_units': max(_U - i*10, 50), 'spectral_radius': 0.99,
+           'leak': None, 'connectivity': 0.3, 'input_scaling': 0.2,
+           'noise_level': 0.0, 'circle': False} for i in range(5)]
+_CFG6 = [{'n_internal_units': max(_U - i*10, 50), 'spectral_radius': 0.99,
+           'leak': None, 'connectivity': 0.3, 'input_scaling': 0.2,
+           'noise_level': 0.0, 'circle': False} for i in range(6)]
+
 MODEL_CONFIGS = [
     ('RC',          'Baseline RC',
-     lambda: RC_model(n_internal_units=400, readout_type=None)),
+     lambda: RC_model(n_internal_units=_U, readout_type=None)),
     ('StackedRC',   'StackedRC (5L)',
-     lambda: StackedRC_model(n_layers=5, reservoir_configs=None, readout_type=None)),
+     lambda: StackedRC_model(n_layers=5, reservoir_configs=_CFG5, readout_type=None)),
     ('MultiExpert', 'MultiExpert RC (6L,5E)',
      lambda: MultiExpertStackedRC_model(
-         n_layers=6, n_experts=5, reservoir_configs=None,
+         n_layers=6, n_experts=5, reservoir_configs=_CFG6,
          mts_rep='mean', readout_type=None)),
     ('MoE',         'MoE RC (6L,15E)',
      lambda: MoEStackedRC_model(
-         n_layers=6, n_experts=15, reservoir_configs=None,
+         n_layers=6, n_experts=15, reservoir_configs=_CFG6,
          gate_lr=0.01, gate_epochs=100, gate_reg=1e-4,
          intra_gate_input='mean', readout_type=None, mts_rep='mean')),
 ]
@@ -128,7 +137,21 @@ if __name__ == '__main__':
     X = np.concatenate((Xtr, Xte), axis=0)
     Y = np.concatenate((Ytr, Yte), axis=0)
     true_labels = Y[:, 0]
-    print(f'  形状={X.shape}  类别={len(np.unique(true_labels))}')
+    print(f'  原始形状={X.shape}  类别={len(np.unique(true_labels))}')
+
+    # 每类保留30个样本，时间步每5帧取1帧：315→63
+    MAX_PER_CLASS = 30
+    rng = np.random.default_rng(0)
+    keep = []
+    for c in np.unique(true_labels):
+        idx = np.where(true_labels == c)[0]
+        if len(idx) > MAX_PER_CLASS:
+            idx = rng.choice(idx, MAX_PER_CLASS, replace=False)
+        keep.append(idx)
+    keep = np.sort(np.concatenate(keep))
+    X, true_labels = X[keep], true_labels[keep]
+    X = X[:, ::5, :]
+    print(f'  压缩后形状={X.shape}  类别={len(np.unique(true_labels))}')
 
     csv_rows, umap_data = [], []
 

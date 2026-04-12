@@ -46,18 +46,27 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 DS_NAME  = 'Japanese_Vowels'
 DS_LABEL = 'Japanese Vowels'
 
+# 640样本×29步，储备池适度缩减至200
+_U = 200
+_CFG5 = [{'n_internal_units': max(_U - i*20, 50), 'spectral_radius': 0.99,
+           'leak': None, 'connectivity': 0.3, 'input_scaling': 0.2,
+           'noise_level': 0.0, 'circle': False} for i in range(5)]
+_CFG6 = [{'n_internal_units': max(_U - i*20, 50), 'spectral_radius': 0.99,
+           'leak': None, 'connectivity': 0.3, 'input_scaling': 0.2,
+           'noise_level': 0.0, 'circle': False} for i in range(6)]
+
 MODEL_CONFIGS = [
     ('RC',          'Baseline RC',
-     lambda: RC_model(n_internal_units=400, readout_type=None)),
+     lambda: RC_model(n_internal_units=_U, readout_type=None)),
     ('StackedRC',   'StackedRC (5L)',
-     lambda: StackedRC_model(n_layers=5, reservoir_configs=None, readout_type=None)),
+     lambda: StackedRC_model(n_layers=5, reservoir_configs=_CFG5, readout_type=None)),
     ('MultiExpert', 'MultiExpert RC (6L,5E)',
      lambda: MultiExpertStackedRC_model(
-         n_layers=6, n_experts=5, reservoir_configs=None,
+         n_layers=6, n_experts=5, reservoir_configs=_CFG6,
          mts_rep='mean', readout_type=None)),
     ('MoE',         'MoE RC (6L,15E)',
      lambda: MoEStackedRC_model(
-         n_layers=6, n_experts=15, reservoir_configs=None,
+         n_layers=6, n_experts=15, reservoir_configs=_CFG6,
          gate_lr=0.01, gate_epochs=100, gate_reg=1e-4,
          intra_gate_input='mean', readout_type=None, mts_rep='mean')),
 ]
