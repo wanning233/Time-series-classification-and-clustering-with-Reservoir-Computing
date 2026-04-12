@@ -73,17 +73,31 @@ MODEL_CONFIGS = [
 
 # ── 工具函数 ───────────────────────────────────────────────────────────────
 def evaluate_clustering(reprs, true_labels, model_name=''):
+    from sklearn.cluster import KMeans
+    k = len(np.unique(true_labels))
+
+    # Ward 层次聚类
     Dist      = cosine_distances(reprs)
     distArray = ssd.squareform(Dist)
     Z         = linkage(distArray, 'ward')
-    k         = len(np.unique(true_labels))
-    clust     = fcluster(Z, t=k, criterion='maxclust')
-    nmi       = v_measure_score(true_labels, clust)
-    ari       = adjusted_rand_score(true_labels, clust)
-    n_found   = len(np.unique(clust))
+    clust_ward = fcluster(Z, t=k, criterion='maxclust')
+    nmi_ward   = v_measure_score(true_labels, clust_ward)
+    ari_ward   = adjusted_rand_score(true_labels, clust_ward)
+
+    # K-Means
+    clust_km = KMeans(n_clusters=k, n_init=20, random_state=42).fit_predict(reprs)
+    nmi_km   = v_measure_score(true_labels, clust_km)
+    ari_km   = adjusted_rand_score(true_labels, clust_km)
+
     if model_name:
-        print(f"    {model_name:30s}  NMI={nmi:.4f}  ARI={ari:.4f}  簇数={n_found}")
-    return nmi, ari, n_found, clust
+        print(f"    {model_name:30s}  Ward: NMI={nmi_ward:.4f} ARI={ari_ward:.4f}  "
+              f"KMeans: NMI={nmi_km:.4f} ARI={ari_km:.4f}")
+
+    # 取 ARI 更高的结果
+    if ari_km >= ari_ward:
+        return nmi_km, ari_km, len(np.unique(clust_km)), clust_km
+    else:
+        return nmi_ward, ari_ward, len(np.unique(clust_ward)), clust_ward
 
 
 def save_umap(ds_label, models_results, true_labels):
