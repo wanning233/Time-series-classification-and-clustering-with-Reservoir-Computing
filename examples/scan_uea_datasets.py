@@ -22,20 +22,55 @@ def fetch_dataset_list():
     print("正在从官网获取完整数据集列表...")
     try:
         from bs4 import BeautifulSoup
-        url = "http://www.timeseriesclassification.com/index.php"
-        r = requests.get(url, timeout=15)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        # 找所有数据集链接
+
+        # 尝试多个可能的URL
+        urls = [
+            "https://www.timeseriesclassification.com/index.php",
+            "https://www.timeseriesclassification.com/dataset.php",
+            "http://www.timeseriesclassification.com/index.php",
+        ]
+
+        html = None
+        for url in urls:
+            try:
+                r = requests.get(url, timeout=15,
+                                 headers={'User-Agent': 'Mozilla/5.0'})
+                if r.status_code == 200 and len(r.text) > 500:
+                    html = r.text
+                    print(f"  成功访问: {url} (长度={len(html)})")
+                    break
+            except Exception as e:
+                print(f"  {url} 失败: {e}")
+
+        if not html:
+            print("所有URL均无法访问")
+            return None
+
+        # 调试：打印前500字符和所有链接
+        print(f"\n--- HTML前300字符 ---\n{html[:300]}\n---")
+
+        soup = BeautifulSoup(html, 'html.parser')
+        all_links = [(a.get('href',''), a.text.strip())
+                     for a in soup.find_all('a', href=True)]
+        print(f"页面共有 {len(all_links)} 个链接，前10个：")
+        for href, text in all_links[:10]:
+            print(f"  href={href!r}  text={text!r}")
+
+        # 尝试多种链接格式
         names = []
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            if 'description.php?Dataset=' in href:
-                name = href.split('Dataset=')[-1].strip()
-                if name:
-                    names.append(name)
+        patterns = ['Dataset=', 'dataset=', 'd=', 'name=']
+        for href, text in all_links:
+            for pat in patterns:
+                if pat in href:
+                    name = href.split(pat)[-1].split('&')[0].strip()
+                    if name and len(name) > 2:
+                        names.append(name)
+                    break
+
         names = sorted(set(names))
         print(f"官网共找到 {len(names)} 个数据集")
-        return names
+        return names if names else None
+
     except Exception as e:
         print(f"官网抓取失败({e})，使用 aeon 内置列表")
         return None
