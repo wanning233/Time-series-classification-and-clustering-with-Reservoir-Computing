@@ -77,7 +77,10 @@ def scan(dataset_names):
 
     candidates, failed = [], []
 
+    SKIP = 74  # 已扫描前74个，从第75个继续
     for i, name in enumerate(dataset_names):
+        if i < SKIP:
+            continue
         try:
             X_tr, y_tr = load_classification(name, split="train")
             X_te, y_te = load_classification(name, split="test")
