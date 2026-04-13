@@ -57,10 +57,10 @@ def get_all_dataset_names():
     return sorted(names)
 
 
-# ── 扫描并筛选 ────────────────────────────────────────────────────────────
+# ── 扫描并筛选（使用元数据，无需下载）────────────────────────────────────
 def scan(dataset_names):
     try:
-        from aeon.datasets import load_classification
+        from aeon.datasets import get_dataset_meta_data
     except ImportError:
         print("请先安装 aeon: pip install aeon")
         return
@@ -70,25 +70,30 @@ def scan(dataset_names):
     MIN_TIMEPOINTS, MAX_TIMEPOINTS = 20, 300
     MIN_DIMS                       = 2
 
-    print(f"\n共 {len(dataset_names)} 个数据集，开始扫描...\n")
+    print(f"\n共 {len(dataset_names)} 个数据集，读取元数据（无需下载）...\n")
     print(f"筛选条件: 类别[{MIN_CLASSES},{MAX_CLASSES}], 样本[{MIN_SAMPLES},{MAX_SAMPLES}], "
           f"时间步[{MIN_TIMEPOINTS},{MAX_TIMEPOINTS}], 变量>={MIN_DIMS}\n")
     print("="*85)
 
     candidates, failed = [], []
 
-    SKIP = 74  # 已扫描前74个，从第75个继续
     for i, name in enumerate(dataset_names):
-        if i < SKIP:
-            continue
         try:
-            X_tr, y_tr = load_classification(name, split="train")
-            X_te, y_te = load_classification(name, split="test")
+            meta = get_dataset_meta_data(name)
 
-            n_tot = X_tr.shape[0] + X_te.shape[0]
-            n_dim = X_tr.shape[1]
-            t_len = X_tr.shape[2]
-            n_cls = len(np.unique(np.concatenate([y_tr, y_te])))
+            # 元数据字段名可能有多种写法，兼容处理
+            n_tot = meta.get('n_instances', meta.get('n_samples',
+                    meta.get('train_size', 0) + meta.get('test_size', 0)))
+            n_dim = meta.get('n_columns', meta.get('n_dims',
+                    meta.get('n_channels', meta.get('n_features', 0))))
+            t_len = meta.get('series_length', meta.get('n_timepoints',
+                    meta.get('length', 0)))
+            n_cls = meta.get('n_classes', meta.get('num_classes', 0))
+
+            # 如果元数据不完整，跳过
+            if not all([n_tot, n_dim, t_len, n_cls]):
+                print(f"   [{i+1:3d}] {name:<42s} 元数据不完整: {meta}")
+                continue
 
             line = (f"[{i+1:3d}] {name:<42s} "
                     f"样本={n_tot:5d} 变量={n_dim:4d} 时间步={t_len:5d} 类别={n_cls:3d}")
@@ -116,7 +121,7 @@ def scan(dataset_names):
                 print(f"   {line}  ✗ {', '.join(reasons)}")
 
         except Exception as e:
-            print(f"   [{i+1:3d}] {name:<42s} 加载失败: {e}")
+            print(f"   [{i+1:3d}] {name:<42s} 元数据失败: {e}")
             failed.append(name)
 
     print("\n" + "="*85)
@@ -128,7 +133,7 @@ def scan(dataset_names):
               f"{d['n_timepoints']:>7d} {d['n_classes']:>5d}")
 
     if failed:
-        print(f"\n加载失败({len(failed)}个): {', '.join(failed)}")
+        print(f"\n元数据获取失败({len(failed)}个): {', '.join(failed)}")
 
     print("\n扫描完成。")
 
